@@ -1,0 +1,26 @@
+from app.chat.schemas import MessageStatus
+from app.chat.service import ChatService
+from app.storage.conversations import InMemoryConversationRepository
+
+
+class FakeAgentRunner:
+    async def stream(self, messages):
+        assert messages[-1]["role"] == "user"
+        yield "hello"
+        yield " world"
+
+
+async def test_chat_service_streams_and_persists_assistant_message():
+    repository = InMemoryConversationRepository()
+    conversation = repository.create_conversation()
+    service = ChatService(repository=repository, agent_runner=FakeAgentRunner())
+
+    events = []
+    async for event in service.stream_user_message(conversation.id, "hi"):
+        events.append(event)
+
+    assert [event["type"] for event in events] == ["started", "delta", "delta", "completed"]
+    messages = repository.get_messages(conversation.id)
+    assert messages[0].content == "hi"
+    assert messages[1].content == "hello world"
+    assert messages[1].status == MessageStatus.COMPLETED
