@@ -35,3 +35,15 @@ class DeepAgentRunner:
             content = getattr(chunk, "content", "")
             if isinstance(content, str) and content:
                 yield content
+
+
+class LazyDeepAgentRunner:
+    def __init__(self, settings: Settings) -> None:
+        self._settings = settings
+        self._runner: DeepAgentRunner | None = None
+
+    async def stream(self, messages: list[dict[str, str]]) -> AsyncIterator[str]:
+        if self._runner is None:
+            self._runner = DeepAgentRunner(self._settings)
+        async for chunk in self._runner.stream(messages):
+            yield chunk
