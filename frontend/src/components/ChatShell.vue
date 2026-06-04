@@ -73,13 +73,18 @@ async function send(content) {
           conversationId: conversationId.value,
           role: 'assistant',
           content: '',
-          status: 'streaming'
+          status: 'streaming',
+          reasoning: []
         })
       }
 
       const assistant = messages.value.find((message) => message.id === event.messageId)
       if (!assistant) return
 
+      if (event.type === 'reasoning') {
+        if (!assistant.reasoning) assistant.reasoning = []
+        assistant.reasoning.push(event.content)
+      }
       if (event.type === 'delta') assistant.content += event.content
       if (event.type === 'completed') {
         assistant.content = event.content || assistant.content
@@ -96,7 +101,8 @@ async function send(content) {
       conversationId: conversationId.value,
       role: 'assistant',
       content: error.message,
-      status: 'failed'
+      status: 'failed',
+      reasoning: []
     })
   } finally {
     isStreaming.value = false

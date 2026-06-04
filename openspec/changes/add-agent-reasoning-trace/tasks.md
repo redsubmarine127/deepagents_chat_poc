@@ -1,8 +1,8 @@
 # Add Agent Reasoning Trace Tasks
 
-- [ ] Convert DeepAgents events into `reasoning` and `delta` stream events.
-- [ ] Log TodoList updates from `write_todos`.
-- [ ] Forward reasoning SSE events through ChatService.
-- [ ] Render reasoning events in the frontend.
-- [ ] Add backend tests.
-- [ ] Run backend tests and frontend build.
+- [x] Convert DeepAgents events into `reasoning` and `delta` stream events.
+- [x] Log TodoList updates from `write_todos`.
+- [x] Forward reasoning SSE events through ChatService.
+- [x] Render reasoning events in the frontend.
+- [x] Add backend tests.
+- [x] Run backend tests and frontend build.

@@ -8,6 +8,12 @@
       :class="[`message-${message.role}`, { failed: message.status === 'failed' }]"
     >
       <div class="message-role">{{ message.role === 'user' ? 'You' : 'Assistant' }}</div>
+      <details v-if="message.reasoning?.length" class="reasoning-panel" open>
+        <summary>思考过程</summary>
+        <ol>
+          <li v-for="(item, index) in message.reasoning" :key="index">{{ item }}</li>
+        </ol>
+      </details>
       <div class="message-content">{{ message.content }}</div>
     </article>
   </div>
