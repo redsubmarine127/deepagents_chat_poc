@@ -88,6 +88,8 @@ def test_deep_agent_runner_uses_configured_system_prompt(monkeypatch, tmp_path):
 
 
 async def test_deep_agent_runner_converts_todo_events_to_reasoning(monkeypatch, tmp_path, caplog):
+    caplog.set_level("INFO", logger="app.chat.agent")
+
     def fake_create_deep_agent(**kwargs):
         return FakeEventAgent()
 
@@ -104,3 +106,7 @@ async def test_deep_agent_runner_converts_todo_events_to_reasoning(monkeypatch, 
     assert events[0]["type"] == "reasoning"
     assert "TodoList" in events[0]["content"]
     assert events[-1] == {"type": "delta", "content": "done"}
+    log_text = "\n".join(record.getMessage() for record in caplog.records)
+    assert "agent.tool.start" in log_text
+    assert "agent.tool.end" in log_text
+    assert "agent.model.delta" in log_text

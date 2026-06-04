@@ -24,3 +24,7 @@ uvicorn app.main:app --host 127.0.0.1 --port 8090 --reload
 ```bash
 python -m pytest -v
 ```
+
+## Logs
+
+Operational logs are written through Python `logging` and appear in the uvicorn terminal. Logs include chat lifecycle events, model stream chunks, tool calls, and skill loading. Long content is summarized, and sensitive payload keys are redacted.

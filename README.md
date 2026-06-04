@@ -88,6 +88,16 @@ cd frontend
 npm run build
 ```
 
+## 运行日志
+
+后端使用 Python 标准 `logging` 输出运维日志，启动后可直接在 uvicorn 终端查看。当前日志覆盖：
+
+- 对话请求开始、上下文数量、流式输出片段、完成和失败。
+- DeepAgents 初始化、模型流式输出、工具调用开始和结束。
+- Skill 目录解析、缺失目录、发现的 skill 数量和 skill id。
+
+日志会对长文本做截断摘要，并对 payload 中的 `api_key`、`token`、`secret`、`password` 等敏感字段脱敏。
+
 ## 项目目录结构
 
 ```text

@@ -1,3 +1,5 @@
+import logging
+
 from app.skills.loader import discover_skills
 
 
@@ -28,3 +30,18 @@ Detailed instructions stay on disk until needed.
 
 def test_discover_skills_returns_empty_for_missing_directory(tmp_path):
     assert discover_skills(tmp_path, "skills") == []
+
+
+def test_discover_skills_logs_resolution_and_count(tmp_path, caplog):
+    skill_file = tmp_path / "skills" / "requirements" / "SKILL.md"
+    skill_file.parent.mkdir(parents=True)
+    skill_file.write_text("---\nname: requirements\n---\n", encoding="utf-8")
+
+    caplog.set_level(logging.INFO, logger="app.skills.loader")
+
+    discover_skills(tmp_path, "skills")
+
+    log_text = "\n".join(record.getMessage() for record in caplog.records)
+    assert "skills.resolve" in log_text
+    assert "skills.discovered" in log_text
+    assert "count=1" in log_text

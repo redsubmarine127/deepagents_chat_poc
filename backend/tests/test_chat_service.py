@@ -1,3 +1,5 @@
+import logging
+
 from app.chat.schemas import MessageStatus
 from app.chat.service import ChatService
 from app.storage.conversations import InMemoryConversationRepository
@@ -47,3 +49,21 @@ async def test_chat_service_forwards_reasoning_without_persisting_it():
     assert events[2]["content"] == "TodoList: plan created"
     messages = repository.get_messages(conversation.id)
     assert messages[1].content == "answer"
+
+
+async def test_chat_service_logs_lifecycle_with_bounded_content(caplog):
+    repository = InMemoryConversationRepository()
+    conversation = repository.create_conversation()
+    service = ChatService(repository=repository, agent_runner=FakeAgentRunner())
+    user_content = "hello " + ("x" * 160)
+
+    caplog.set_level(logging.INFO, logger="app.chat.service")
+
+    async for _ in service.stream_user_message(conversation.id, user_content):
+        pass
+
+    log_text = "\n".join(record.getMessage() for record in caplog.records)
+    assert "chat.stream.start" in log_text
+    assert "chat.stream.delta" in log_text
+    assert "chat.stream.completed" in log_text
+    assert user_content not in log_text
