@@ -44,3 +44,26 @@ def test_deep_agent_runner_skips_skills_when_disabled(monkeypatch, tmp_path):
     assert captured["skills"] is None
     assert captured["backend"] is None
     assert captured["permissions"] is None
+
+
+def test_deep_agent_runner_uses_configured_system_prompt(monkeypatch, tmp_path):
+    prompt_file = tmp_path / "prompts" / "system.md"
+    prompt_file.parent.mkdir()
+    prompt_file.write_text("Custom prompt from disk", encoding="utf-8")
+    captured = {}
+
+    def fake_create_deep_agent(**kwargs):
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(agent_module, "ChatOpenAI", FakeChatOpenAI)
+    monkeypatch.setattr(agent_module, "create_deep_agent", fake_create_deep_agent)
+
+    settings = Settings(
+        MODEL_API_KEY="test-key",
+        SKILLS_ENABLED=False,
+        SYSTEM_PROMPT_PATH="prompts/system.md",
+    )
+    DeepAgentRunner(settings, project_root=tmp_path)
+
+    assert captured["system_prompt"] == "Custom prompt from disk"

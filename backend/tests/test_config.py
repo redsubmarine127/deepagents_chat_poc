@@ -32,3 +32,11 @@ def test_settings_reads_skill_loading_environment(monkeypatch):
 
     assert settings.skills_enabled is False
     assert settings.skills_dir == "custom-skills"
+
+
+def test_settings_reads_system_prompt_path(monkeypatch):
+    monkeypatch.setenv("SYSTEM_PROMPT_PATH", "custom/prompts/system.md")
+
+    settings = Settings()
+
+    assert settings.system_prompt_path == "custom/prompts/system.md"

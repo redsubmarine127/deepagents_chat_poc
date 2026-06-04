@@ -7,12 +7,7 @@ from deepagents.middleware.filesystem import FilesystemPermission
 from langchain_openai import ChatOpenAI
 
 from app.config import Settings
-
-SYSTEM_PROMPT = (
-    "You are a helpful intelligent conversation assistant. "
-    "Answer clearly and concisely. Use Chinese when the user writes Chinese, "
-    "and English when the user writes English."
-)
+from app.chat.prompts import load_system_prompt
 
 
 class DeepAgentRunner:
@@ -21,6 +16,7 @@ class DeepAgentRunner:
             raise ValueError("MODEL_API_KEY is required for remote model streaming.")
 
         root = project_root or Path(__file__).resolve().parents[3]
+        system_prompt = load_system_prompt(root, settings.system_prompt_path)
         skills, backend, permissions = _resolve_deepagents_skills(settings, root)
         model = ChatOpenAI(
             model=settings.model_id,
@@ -32,7 +28,7 @@ class DeepAgentRunner:
         self._agent = create_deep_agent(
             model=model,
             tools=[],
-            system_prompt=SYSTEM_PROMPT,
+            system_prompt=system_prompt,
             skills=skills,
             backend=backend,
             permissions=permissions,

@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     cors_origins_raw: str = Field(default="http://127.0.0.1:5173", alias="CORS_ORIGINS")
     skills_enabled: bool = Field(default=True, alias="SKILLS_ENABLED")
     skills_dir: str = Field(default="skills", alias="SKILLS_DIR")
+    system_prompt_path: str = Field(default="prompts/system.md", alias="SYSTEM_PROMPT_PATH")
 
     @property
     def cors_origins(self) -> list[str]:
