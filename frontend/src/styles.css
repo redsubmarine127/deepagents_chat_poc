@@ -46,6 +46,60 @@ textarea {
   font-size: 13px;
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.skills-menu {
+  position: relative;
+}
+
+.skills-button {
+  min-width: 78px;
+  height: 36px;
+  border: 1px solid #c9d2d7;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #33424a;
+  cursor: pointer;
+}
+
+.skills-popover {
+  position: absolute;
+  top: 44px;
+  right: 0;
+  z-index: 2;
+  width: min(320px, calc(100vw - 32px));
+  padding: 10px;
+  border: 1px solid #c9d2d7;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 16px 34px rgba(24, 32, 38, 0.16);
+}
+
+.skill-item {
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+}
+
+.skill-item + .skill-item {
+  border-top: 1px solid #edf1f3;
+}
+
+.skill-item strong {
+  font-size: 13px;
+}
+
+.skill-item span,
+.skill-empty {
+  color: #66737a;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .icon-button {
   width: 36px;
   height: 36px;

@@ -22,3 +22,13 @@ def test_settings_parses_comma_separated_cors(monkeypatch):
     settings = Settings()
 
     assert settings.cors_origins == ["http://a.test", "http://b.test"]
+
+
+def test_settings_reads_skill_loading_environment(monkeypatch):
+    monkeypatch.setenv("SKILLS_ENABLED", "false")
+    monkeypatch.setenv("SKILLS_DIR", "custom-skills")
+
+    settings = Settings()
+
+    assert settings.skills_enabled is False
+    assert settings.skills_dir == "custom-skills"

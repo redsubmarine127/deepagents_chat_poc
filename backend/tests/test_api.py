@@ -28,6 +28,15 @@ def test_create_and_list_conversation_messages():
     assert messages.json() == []
 
 
+def test_list_skills_endpoint_returns_metadata():
+    client = TestClient(app)
+
+    response = client.get("/api/skills")
+
+    assert response.status_code == 200
+    assert isinstance(response.json(), list)
+
+
 def test_stream_without_api_key_returns_failed_event():
     client = TestClient(app)
     conversation_id = client.post("/api/conversations").json()["id"]

@@ -12,6 +12,12 @@ export async function listMessages(conversationId) {
   return response.json()
 }
 
+export async function listSkills() {
+  const response = await fetch(`${API_BASE_URL}/api/skills`)
+  if (!response.ok) throw new Error('Unable to load skills')
+  return response.json()
+}
+
 export async function streamMessage(conversationId, content, onEvent) {
   const response = await fetch(`${API_BASE_URL}/api/conversations/${conversationId}/messages/stream`, {
     method: 'POST',

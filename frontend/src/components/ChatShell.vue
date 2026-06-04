@@ -5,7 +5,21 @@
         <h1>DeepAgents Chat</h1>
         <p>Lightweight streaming conversation</p>
       </div>
-      <button type="button" class="icon-button" title="New conversation" @click="startConversation">+</button>
+      <div class="topbar-actions">
+        <div class="skills-menu">
+          <button type="button" class="skills-button" title="Loaded skills" @click="showSkills = !showSkills">
+            Skills: {{ skills.length }}
+          </button>
+          <div v-if="showSkills" class="skills-popover">
+            <div v-if="skills.length === 0" class="skill-empty">No skills loaded</div>
+            <div v-for="skill in skills" :key="skill.id" class="skill-item">
+              <strong>{{ skill.name }}</strong>
+              <span>{{ skill.description || skill.path }}</span>
+            </div>
+          </div>
+        </div>
+        <button type="button" class="icon-button" title="New conversation" @click="startConversation">+</button>
+      </div>
     </header>
 
     <MessageList :messages="messages" />
@@ -15,18 +29,28 @@
 
 <script setup>
 import { onMounted, ref } from 'vue'
-import { createConversation, listMessages, streamMessage } from '../api/chat'
+import { createConversation, listMessages, listSkills, streamMessage } from '../api/chat'
 import MessageInput from './MessageInput.vue'
 import MessageList from './MessageList.vue'
 
 const conversationId = ref('')
 const messages = ref([])
 const isStreaming = ref(false)
+const skills = ref([])
+const showSkills = ref(false)
 
 async function startConversation() {
   const conversation = await createConversation()
   conversationId.value = conversation.id
   messages.value = await listMessages(conversation.id)
+}
+
+async function loadSkills() {
+  try {
+    skills.value = await listSkills()
+  } catch {
+    skills.value = []
+  }
 }
 
 async function send(content) {
@@ -79,5 +103,7 @@ async function send(content) {
   }
 }
 
-onMounted(startConversation)
+onMounted(async () => {
+  await Promise.all([startConversation(), loadSkills()])
+})
 </script>
