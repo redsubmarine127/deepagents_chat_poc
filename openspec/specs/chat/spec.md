@@ -31,6 +31,15 @@ The chat capability lets a user send messages through a Vue frontend and receive
 - The agent SHOULD receive the conversation history as chat messages.
 - The agent SHOULD use a concise system prompt suitable for general intelligent conversation.
 
+### Skill Loading
+
+- The backend MUST discover local skills from `SKILLS_DIR`, which defaults to `skills`.
+- The backend MUST support `SKILLS_ENABLED=false` to disable skill loading.
+- The backend MUST use DeepAgents native progressive disclosure for skill loading.
+- Full skill contents MUST NOT be injected into every request by default.
+- The backend MUST expose `GET /api/skills` with discovered skill metadata.
+- The skill metadata endpoint MUST NOT return full skill file contents.
+
 ### Model Configuration
 
 - The model provider MUST be OpenAI-compatible.
