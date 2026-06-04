@@ -10,7 +10,9 @@ from deepagents.middleware.filesystem import FilesystemPermission
 from langchain_openai import ChatOpenAI
 
 from app.config import Settings
+from app.chat.events import ChatStreamEvent, stream_delta, stream_reasoning
 from app.chat.prompts import load_system_prompt
+from app.skills.loader import resolve_skill_directory
 
 logger = logging.getLogger(__name__)
 
@@ -39,13 +41,13 @@ class DeepAgentRunner:
             permissions=permissions,
         )
 
-    async def stream(self, messages: list[dict[str, str]]) -> AsyncIterator[dict[str, str]]:
-        async for event in self._agent.astream_events({"messages": messages}, version="v2"):
-            stream_event = _map_deepagents_event(event)
-            if stream_event is None:
+    async def stream(self, messages: list[dict[str, str]]) -> AsyncIterator[ChatStreamEvent]:
+        async for raw_event in self._agent.astream_events({"messages": messages}, version="v2"):
+            chat_event = _map_deepagents_event(raw_event)
+            if chat_event is None:
                 continue
 
-            yield stream_event
+            yield chat_event
 
 
 class LazyDeepAgentRunner:
@@ -54,39 +56,42 @@ class LazyDeepAgentRunner:
         self._project_root = project_root
         self._runner: DeepAgentRunner | None = None
 
-    async def stream(self, messages: list[dict[str, str]]) -> AsyncIterator[dict[str, str]]:
+    async def stream(self, messages: list[dict[str, str]]) -> AsyncIterator[ChatStreamEvent]:
         if self._runner is None:
             self._runner = DeepAgentRunner(self._settings, project_root=self._project_root)
-        async for chunk in self._runner.stream(messages):
-            yield chunk
+        async for chat_event in self._runner.stream(messages):
+            yield chat_event
 
 
-def _map_deepagents_event(event: dict[str, Any]) -> dict[str, str] | None:
-    event_name = event.get("event")
-    tool_name = event.get("name", "")
-    data = event.get("data", {})
+def _map_deepagents_event(raw_event: dict[str, Any]) -> ChatStreamEvent | None:
+    # DeepAgents emits LangChain callback events; the UI only needs answer deltas and observable tool progress.
+    event_name = raw_event.get("event")
+    tool_name = raw_event.get("name", "")
+    event_data = raw_event.get("data", {})
 
     if event_name == "on_chat_model_stream":
-        chunk = data.get("chunk")
+        chunk = event_data.get("chunk")
         content = getattr(chunk, "content", "")
         if isinstance(content, str) and content:
-            return {"type": "delta", "content": content}
+            return stream_delta(content)
         return None
 
     if event_name == "on_tool_start":
         if tool_name == "write_todos":
-            content = _format_todo_payload("TodoList 更新中", data.get("input"))
-            logger.info("TodoList update start: %s", _safe_json(data.get("input")))
-            return {"type": "reasoning", "content": content}
+            tool_input = event_data.get("input")
+            content = _format_todo_payload("TodoList 更新中", tool_input)
+            logger.info("TodoList update start: %s", _safe_json(tool_input))
+            return stream_reasoning(content)
         if tool_name == "read_file":
-            return {"type": "reasoning", "content": _format_read_file_event(data.get("input"))}
+            return stream_reasoning(_format_read_file_event(event_data.get("input")))
         if tool_name:
-            return {"type": "reasoning", "content": f"调用工具：{tool_name}"}
+            return stream_reasoning(f"调用工具：{tool_name}")
 
     if event_name == "on_tool_end" and tool_name == "write_todos":
-        content = _format_todo_payload("TodoList 已更新", data.get("output"))
-        logger.info("TodoList update end: %s", _safe_json(data.get("output")))
-        return {"type": "reasoning", "content": content}
+        tool_output = event_data.get("output")
+        content = _format_todo_payload("TodoList 已更新", tool_output)
+        logger.info("TodoList update end: %s", _safe_json(tool_output))
+        return stream_reasoning(content)
 
     return None
 
@@ -117,23 +122,14 @@ def _resolve_deepagents_skills(
     if not settings.skills_enabled:
         return None, None, None
 
-    source = Path(settings.skills_dir)
-    if source.is_absolute():
-        root = source.parent.resolve()
-        skill_source = f"/{source.name}/"
-    else:
-        root = project_root.resolve()
-        resolved_source = (root / source).resolve()
-        if not resolved_source.exists() or not resolved_source.is_dir():
-            return None, None, None
-        skill_source = f"/{source.as_posix().strip('/')}/"
-
-    if not (root / skill_source.strip("/")).exists():
+    skill_directory = resolve_skill_directory(project_root, settings.skills_dir)
+    if not skill_directory.source_dir.exists() or not skill_directory.source_dir.is_dir():
         return None, None, None
 
     permissions = [
-        FilesystemPermission(operations=["read"], paths=[f"{skill_source}**"], mode="allow"),
+        FilesystemPermission(operations=["read"], paths=[f"{skill_directory.virtual_path}**"], mode="allow"),
         FilesystemPermission(operations=["read"], paths=["/**"], mode="deny"),
         FilesystemPermission(operations=["write"], paths=["/**"], mode="deny"),
     ]
-    return [skill_source], FilesystemBackend(root_dir=root, virtual_mode=True), permissions
+    backend = FilesystemBackend(root_dir=skill_directory.root_dir, virtual_mode=True)
+    return [skill_directory.virtual_path], backend, permissions

@@ -58,7 +58,7 @@ class SendMessageRequest(BaseModel):
     content: str = Field(min_length=1)
 
 
-def conversation_response(conversation: Conversation) -> ConversationResponse:
+def to_conversation_response(conversation: Conversation) -> ConversationResponse:
     return ConversationResponse(
         id=conversation.id,
         title=conversation.title,
@@ -67,7 +67,7 @@ def conversation_response(conversation: Conversation) -> ConversationResponse:
     )
 
 
-def message_response(message: Message) -> MessageResponse:
+def to_message_response(message: Message) -> MessageResponse:
     return MessageResponse(
         id=message.id,
         conversationId=message.conversation_id,
