@@ -28,6 +28,11 @@ class ChatService:
             status=MessageStatus.STREAMING,
         )
         yield {"type": "started", "messageId": assistant.id, "content": ""}
+        yield {
+            "type": "reasoning",
+            "messageId": assistant.id,
+            "content": "已创建任务上下文，开始调用 Agent",
+        }
 
         chunks: list[str] = []
         history = [
