@@ -30,6 +30,9 @@ The chat capability lets a user send messages through a Vue frontend and receive
 - Version 1 SHOULD create a DeepAgents agent without custom tools.
 - The agent SHOULD receive the conversation history as chat messages.
 - The agent SHOULD use a concise system prompt suitable for general intelligent conversation.
+- The backend MUST support loading the agent system prompt from `SYSTEM_PROMPT_PATH`, which defaults to `prompts/system.md`.
+- If the configured prompt file is missing or empty, the backend MUST fall back to the built-in default prompt.
+- Prompt files MUST NOT contain API keys or other secrets.
 
 ### Skill Loading
 
