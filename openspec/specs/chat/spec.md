@@ -20,9 +20,11 @@ The chat capability lets a user send messages through a Vue frontend and receive
 - The stream endpoint MUST accept a user message.
 - The stream endpoint MUST persist the user message before assistant generation starts.
 - The stream endpoint MUST create an assistant message and emit a `started` event.
+- The stream endpoint MUST emit observable agent progress through zero or more `reasoning` events.
 - The stream endpoint MUST emit assistant text through zero or more `delta` events.
 - The stream endpoint MUST emit exactly one terminal event: `completed` or `failed`.
 - The stream endpoint MUST use `text/event-stream`.
+- The stream endpoint MUST NOT expose hidden model chain-of-thought.
 
 ### DeepAgents Orchestration
 
@@ -33,6 +35,7 @@ The chat capability lets a user send messages through a Vue frontend and receive
 - The backend MUST support loading the agent system prompt from `SYSTEM_PROMPT_PATH`, which defaults to `prompts/system.md`.
 - If the configured prompt file is missing or empty, the backend MUST fall back to the built-in default prompt.
 - Prompt files MUST NOT contain API keys or other secrets.
+- The backend MUST log TodoList updates produced by the DeepAgents `write_todos` tool.
 
 ### Skill Loading
 
