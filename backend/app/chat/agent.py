@@ -53,13 +53,15 @@ class DeepAgentRunner:
 
     async def stream(self, messages: list[dict[str, str]]) -> AsyncIterator[ChatStreamEvent]:
         logger.info("agent.stream.start message_count=%d", len(messages))
-        async for raw_event in self._agent.astream_events({"messages": messages}, version="v2"):
-            chat_event = _map_deepagents_event(raw_event)
-            if chat_event is None:
-                continue
+        try:
+            async for raw_event in self._agent.astream_events({"messages": messages}, version="v2"):
+                chat_event = _map_deepagents_event(raw_event)
+                if chat_event is None:
+                    continue
 
-            yield chat_event
-        logger.info("agent.stream.end message_count=%d", len(messages))
+                yield chat_event
+        finally:
+            logger.info("agent.stream.end message_count=%d", len(messages))
 
 
 class LazyDeepAgentRunner:

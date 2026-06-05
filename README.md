@@ -35,6 +35,7 @@ CORS_ORIGINS=http://127.0.0.1:5173
 SKILLS_ENABLED=true
 SKILLS_DIR=skills
 SYSTEM_PROMPT_PATH=prompts/system.md
+AGENT_MAX_RETRIES=3
 ```
 
 说明：
@@ -44,6 +45,7 @@ SYSTEM_PROMPT_PATH=prompts/system.md
 - `MODEL_API_KEY`: 模型 API key，请只写在本地 `.env` 中。
 - `SKILLS_DIR`: Skill 目录，默认从项目根目录下的 `skills/` 加载。
 - `SYSTEM_PROMPT_PATH`: agent system prompt 文件路径，默认 `prompts/system.md`。
+- `AGENT_MAX_RETRIES`: Agent 执行失败时的最大尝试次数，默认 `3`。
 
 ### 2. 启动后端
 

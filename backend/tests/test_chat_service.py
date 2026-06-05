@@ -1,6 +1,7 @@
 import logging
 
 from app.chat.schemas import MessageStatus
+from app.chat.retry import AgentRetryExhaustedError
 from app.chat.service import ChatService
 from app.storage.conversations import InMemoryConversationRepository
 
@@ -35,6 +36,12 @@ class FakeReasoningAgentRunner:
         yield {"type": "delta", "content": "answer"}
 
 
+class FakeRetryExhaustedAgentRunner:
+    async def stream(self, messages):
+        raise AgentRetryExhaustedError(attempts=3, cause=RuntimeError("skill failed"))
+        yield
+
+
 async def test_chat_service_forwards_reasoning_without_persisting_it():
     repository = InMemoryConversationRepository()
     conversation = repository.create_conversation()
@@ -67,3 +74,19 @@ async def test_chat_service_logs_lifecycle_with_bounded_content(caplog):
     assert "chat.stream.delta" in log_text
     assert "chat.stream.completed" in log_text
     assert user_content not in log_text
+
+
+async def test_chat_service_returns_retry_message_after_agent_exhaustion():
+    repository = InMemoryConversationRepository()
+    conversation = repository.create_conversation()
+    service = ChatService(repository=repository, agent_runner=FakeRetryExhaustedAgentRunner())
+
+    events = []
+    async for event in service.stream_user_message(conversation.id, "hi"):
+        events.append(event)
+
+    assert events[-1]["type"] == "failed"
+    assert "请稍后重试" in events[-1]["content"]
+    messages = repository.get_messages(conversation.id)
+    assert messages[1].status == MessageStatus.FAILED
+    assert "请稍后重试" in messages[1].content

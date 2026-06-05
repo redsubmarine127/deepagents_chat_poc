@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import create_api_router
 from app.chat.agent import LazyDeepAgentRunner
+from app.chat.retry import RetryingAgentRunner
 from app.chat.service import ChatService
 from app.config import get_settings
 from app.observability import configure_app_logging
@@ -16,7 +17,7 @@ configure_app_logging()
 
 settings = get_settings()
 repository = InMemoryConversationRepository()
-agent_runner = LazyDeepAgentRunner(settings)
+agent_runner = RetryingAgentRunner(LazyDeepAgentRunner(settings), max_attempts=settings.agent_max_retries)
 chat_service = ChatService(repository=repository, agent_runner=agent_runner)
 skills = discover_skills(PROJECT_ROOT, settings.skills_dir) if settings.skills_enabled else []
 

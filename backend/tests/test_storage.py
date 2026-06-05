@@ -1,7 +1,7 @@
 import pytest
 
 from app.chat.schemas import MessageRole, MessageStatus
-from app.storage.conversations import InMemoryConversationRepository, UnknownConversationError
+from app.storage.conversations import InMemoryConversationRepository, UnknownConversationError, UnknownMessageError
 
 
 def test_create_conversation_and_append_messages():
@@ -21,3 +21,11 @@ def test_unknown_conversation_raises():
 
     with pytest.raises(UnknownConversationError):
         repository.get_messages("missing")
+
+
+def test_update_unknown_message_raises_explicit_error():
+    repository = InMemoryConversationRepository()
+    conversation = repository.create_conversation()
+
+    with pytest.raises(UnknownMessageError):
+        repository.update_message(conversation.id, "missing-message", content="nope")

@@ -40,3 +40,11 @@ def test_settings_reads_system_prompt_path(monkeypatch):
     settings = Settings()
 
     assert settings.system_prompt_path == "custom/prompts/system.md"
+
+
+def test_settings_reads_agent_max_retries(monkeypatch):
+    monkeypatch.setenv("AGENT_MAX_RETRIES", "5")
+
+    settings = Settings()
+
+    assert settings.agent_max_retries == 5

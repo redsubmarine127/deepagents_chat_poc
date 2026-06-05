@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     skills_enabled: bool = Field(default=True, alias="SKILLS_ENABLED")
     skills_dir: str = Field(default="skills", alias="SKILLS_DIR")
     system_prompt_path: str = Field(default="prompts/system.md", alias="SYSTEM_PROMPT_PATH")
+    agent_max_retries: int = Field(default=3, alias="AGENT_MAX_RETRIES")
 
     @property
     def cors_origins(self) -> list[str]:

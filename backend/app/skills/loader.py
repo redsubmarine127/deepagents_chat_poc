@@ -16,6 +16,22 @@ class SkillDirectory:
 
 def resolve_skill_directory(root_dir: Path | str, skills_dir: str) -> SkillDirectory:
     configured_dir = Path(skills_dir)
+    if not str(skills_dir).strip():
+        root = Path(root_dir).resolve()
+        skill_directory = SkillDirectory(
+            root_dir=root,
+            source_dir=root / "__missing_skills__",
+            virtual_path="/__missing_skills__/",
+        )
+        logger.info(
+            "skills.resolve configured_dir=%s root_dir=%s source_dir=%s virtual_path=%s",
+            skills_dir,
+            skill_directory.root_dir,
+            skill_directory.source_dir,
+            skill_directory.virtual_path,
+        )
+        return skill_directory
+
     if configured_dir.is_absolute():
         # DeepAgents exposes files through a virtual root, so an absolute skills path becomes /<dir-name>/.
         root = configured_dir.parent.resolve()
@@ -52,7 +68,11 @@ def discover_skills(root_dir: Path | str, skills_dir: str) -> list[SkillMetadata
 
     skills: list[SkillMetadata] = []
     for skill_file in sorted(skill_directory.source_dir.rglob("SKILL.md")):
-        metadata = _read_metadata(skill_file)
+        try:
+            metadata = _read_metadata(skill_file)
+        except OSError as exc:
+            logger.warning("skills.skip path=%s error=%s", skill_file, exc)
+            continue
         skill_id = metadata.get("name") or skill_file.parent.name
         skills.append(
             SkillMetadata(

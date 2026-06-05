@@ -7,6 +7,10 @@ class UnknownConversationError(Exception):
     pass
 
 
+class UnknownMessageError(Exception):
+    pass
+
+
 class InMemoryConversationRepository:
     def __init__(self) -> None:
         self._conversations: dict[str, Conversation] = {}
@@ -25,6 +29,10 @@ class InMemoryConversationRepository:
             return conversation
 
     def get_conversation(self, conversation_id: str) -> Conversation:
+        with self._lock:
+            return self._get_conversation_unlocked(conversation_id)
+
+    def _get_conversation_unlocked(self, conversation_id: str) -> Conversation:
         conversation = self._conversations.get(conversation_id)
         if conversation is None:
             raise UnknownConversationError(conversation_id)
@@ -32,7 +40,7 @@ class InMemoryConversationRepository:
 
     def get_messages(self, conversation_id: str) -> list[Message]:
         with self._lock:
-            self.get_conversation(conversation_id)
+            self._get_conversation_unlocked(conversation_id)
             return list(self._messages[conversation_id])
 
     def append_message(
@@ -43,7 +51,7 @@ class InMemoryConversationRepository:
         status: MessageStatus = MessageStatus.COMPLETED,
     ) -> Message:
         with self._lock:
-            conversation = self.get_conversation(conversation_id)
+            conversation = self._get_conversation_unlocked(conversation_id)
             message = Message(conversation_id=conversation_id, role=role, content=content, status=status)
             self._messages[conversation_id].append(message)
             conversation.updated_at = now_utc()
@@ -58,7 +66,7 @@ class InMemoryConversationRepository:
         status: MessageStatus | None = None,
     ) -> Message:
         with self._lock:
-            self.get_conversation(conversation_id)
+            self._get_conversation_unlocked(conversation_id)
             for message in self._messages[conversation_id]:
                 if message.id == message_id:
                     if content is not None:
@@ -67,4 +75,4 @@ class InMemoryConversationRepository:
                         message.status = status
                     message.updated_at = now_utc()
                     return message
-            raise KeyError(message_id)
+            raise UnknownMessageError(message_id)

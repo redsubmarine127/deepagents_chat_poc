@@ -11,6 +11,7 @@ from app.chat.events import (
     stream_reasoning,
     stream_started,
 )
+from app.chat.retry import AgentRetryExhaustedError
 from app.chat.schemas import MessageRole, MessageStatus
 from app.observability import summarize_text
 from app.storage.conversations import InMemoryConversationRepository
@@ -103,7 +104,10 @@ class ChatService:
             )
             yield stream_completed(final_content, message_id=assistant.id)
         except Exception as exc:
-            failure = f"Assistant generation failed: {exc}"
+            if isinstance(exc, AgentRetryExhaustedError):
+                failure = "生成失败，Agent 调用工具或 Skill 多次失败，请稍后重试。"
+            else:
+                failure = f"生成失败，请稍后重试。错误信息：{exc}"
             logger.exception(
                 "chat.stream.failed conversation_id=%s assistant_message_id=%s error_type=%s error=%s",
                 conversation_id,
