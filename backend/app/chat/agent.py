@@ -3,6 +3,7 @@ import json
 import logging
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from deepagents import create_deep_agent
 from deepagents.backends.filesystem import FilesystemBackend
@@ -10,7 +11,7 @@ from deepagents.middleware.filesystem import FilesystemPermission
 from langchain_openai import ChatOpenAI
 
 from app.config import Settings
-from app.chat.events import ChatStreamEvent, stream_delta, stream_reasoning
+from app.chat.events import ChatStreamEvent, stream_approval_required, stream_delta, stream_reasoning
 from app.chat.prompts import load_system_prompt
 from app.observability import summarize_payload, summarize_text
 from app.skills.loader import resolve_skill_directory
@@ -19,7 +20,13 @@ logger = logging.getLogger(__name__)
 
 
 class DeepAgentRunner:
-    def __init__(self, settings: Settings, project_root: Path | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        project_root: Path | None = None,
+        tools: list[Any] | None = None,
+        interrupt_on: dict[str, Any] | None = None,
+    ) -> None:
         if not settings.model_api_key:
             raise ValueError("MODEL_API_KEY is required for remote model streaming.")
 
@@ -27,13 +34,15 @@ class DeepAgentRunner:
         system_prompt = load_system_prompt(root, settings.system_prompt_path)
         skills, backend, permissions = _resolve_deepagents_skills(settings, root)
         logger.info(
-            "agent.init model_id=%s model_base_url=%s temperature=%s system_prompt_path=%s skills_enabled=%s skill_paths=%s",
+            "agent.init model_id=%s model_base_url=%s temperature=%s system_prompt_path=%s skills_enabled=%s skill_paths=%s tool_count=%d hitl_tools=%s patch_tool_calls_middleware=default",
             settings.model_id,
             settings.model_base_url,
             settings.model_temperature,
             settings.system_prompt_path,
             settings.skills_enabled,
             skills or [],
+            len(tools or []),
+            sorted((interrupt_on or {}).keys()),
         )
         model = ChatOpenAI(
             model=settings.model_id,
@@ -44,11 +53,12 @@ class DeepAgentRunner:
         )
         self._agent = create_deep_agent(
             model=model,
-            tools=[],
+            tools=tools or [],
             system_prompt=system_prompt,
             skills=skills,
             backend=backend,
             permissions=permissions,
+            interrupt_on=interrupt_on,
         )
 
     async def stream(self, messages: list[dict[str, str]]) -> AsyncIterator[ChatStreamEvent]:
@@ -65,14 +75,27 @@ class DeepAgentRunner:
 
 
 class LazyDeepAgentRunner:
-    def __init__(self, settings: Settings, project_root: Path | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        project_root: Path | None = None,
+        tools: list[Any] | None = None,
+        interrupt_on: dict[str, Any] | None = None,
+    ) -> None:
         self._settings = settings
         self._project_root = project_root
+        self._tools = tools
+        self._interrupt_on = interrupt_on
         self._runner: DeepAgentRunner | None = None
 
     async def stream(self, messages: list[dict[str, str]]) -> AsyncIterator[ChatStreamEvent]:
         if self._runner is None:
-            self._runner = DeepAgentRunner(self._settings, project_root=self._project_root)
+            self._runner = DeepAgentRunner(
+                self._settings,
+                project_root=self._project_root,
+                tools=self._tools,
+                interrupt_on=self._interrupt_on,
+            )
         async for chat_event in self._runner.stream(messages):
             yield chat_event
 
@@ -82,6 +105,10 @@ def _map_deepagents_event(raw_event: dict[str, Any]) -> ChatStreamEvent | None:
     event_name = raw_event.get("event")
     tool_name = raw_event.get("name", "")
     event_data = raw_event.get("data", {})
+
+    approval_event = _map_interrupt_event(raw_event)
+    if approval_event is not None:
+        return approval_event
 
     if event_name == "on_chat_model_stream":
         chunk = event_data.get("chunk")
@@ -126,6 +153,51 @@ def _map_deepagents_event(raw_event: dict[str, Any]) -> ChatStreamEvent | None:
         logger.info("agent.todo.end payload=%s", summarize_payload(tool_output))
         return stream_reasoning(content)
 
+    return None
+
+
+def _map_interrupt_event(raw_event: dict[str, Any]) -> ChatStreamEvent | None:
+    interrupt_payload = _extract_interrupt_payload(raw_event)
+    if not interrupt_payload:
+        return None
+    action_requests = interrupt_payload.get("action_requests") or []
+    if not action_requests:
+        return None
+
+    action = action_requests[0]
+    tool_name = action.get("name", "unknown")
+    description = action.get("description") or f"工具 {tool_name} 需要人工确认。"
+    logger.info("agent.approval_required tool_name=%s description=%s", tool_name, summarize_text(description))
+    return stream_approval_required(
+        description,
+        approval_id=str(uuid4()),
+        tool_name=tool_name,
+    )
+
+
+def _extract_interrupt_payload(raw_event: dict[str, Any]) -> dict[str, Any] | None:
+    data = raw_event.get("data", {})
+    candidates = [
+        data.get("__interrupt__") if isinstance(data, dict) else None,
+        data.get("interrupts") if isinstance(data, dict) else None,
+        raw_event.get("__interrupt__"),
+        raw_event.get("interrupts"),
+    ]
+    chunk = data.get("chunk") if isinstance(data, dict) else None
+    if isinstance(chunk, dict):
+        candidates.extend([chunk.get("__interrupt__"), chunk.get("interrupts")])
+
+    for candidate in candidates:
+        if isinstance(candidate, list) and candidate:
+            value = getattr(candidate[0], "value", candidate[0])
+            if isinstance(value, dict):
+                return value
+        if isinstance(candidate, tuple) and candidate:
+            value = getattr(candidate[0], "value", candidate[0])
+            if isinstance(value, dict):
+                return value
+        if isinstance(candidate, dict):
+            return candidate
     return None
 
 

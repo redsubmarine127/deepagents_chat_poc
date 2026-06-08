@@ -18,6 +18,35 @@
             </div>
           </div>
         </div>
+        <div class="skills-menu">
+          <button type="button" class="skills-button" title="Loaded tools" @click="showTools = !showTools">
+            Tools: {{ tools.length }}
+          </button>
+          <div v-if="showTools" class="skills-popover">
+            <div v-if="tools.length === 0" class="skill-empty">No tools loaded</div>
+            <div v-for="tool in tools" :key="tool.id" class="skill-item">
+              <strong>{{ tool.name }}</strong>
+              <span>{{ tool.description || tool.path }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="skills-menu">
+          <button type="button" class="skills-button" title="Human approvals" @click="toggleApprovals">
+            Approvals: {{ pendingApprovals.length }}
+          </button>
+          <div v-if="showApprovals" class="skills-popover">
+            <div v-if="approvals.length === 0" class="skill-empty">No approval requests</div>
+            <div v-for="approval in approvals" :key="approval.id" class="approval-item">
+              <strong>{{ approval.toolName }}</strong>
+              <span>{{ approval.description }}</span>
+              <small>{{ approval.status }}</small>
+              <div v-if="approval.status === 'pending'" class="approval-actions">
+                <button type="button" @click="decideApproval(approval.id, 'approve')">Approve</button>
+                <button type="button" @click="decideApproval(approval.id, 'reject')">Reject</button>
+              </div>
+            </div>
+          </div>
+        </div>
         <button type="button" class="icon-button" title="New conversation" @click="startConversation">+</button>
       </div>
     </header>
@@ -28,8 +57,17 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
-import { createConversation, listMessages, listSkills, streamMessage } from '../api/chat'
+import { computed, onMounted, ref } from 'vue'
+import {
+  approveRequest,
+  createConversation,
+  listApprovals,
+  listMessages,
+  listSkills,
+  listTools,
+  rejectRequest,
+  streamMessage
+} from '../api/chat'
 import MessageInput from './MessageInput.vue'
 import MessageList from './MessageList.vue'
 
@@ -37,7 +75,12 @@ const conversationId = ref('')
 const messages = ref([])
 const isStreaming = ref(false)
 const skills = ref([])
+const tools = ref([])
+const approvals = ref([])
 const showSkills = ref(false)
+const showTools = ref(false)
+const showApprovals = ref(false)
+const pendingApprovals = computed(() => approvals.value.filter((approval) => approval.status === 'pending'))
 
 async function startConversation() {
   const conversation = await createConversation()
@@ -51,6 +94,33 @@ async function loadSkills() {
   } catch {
     skills.value = []
   }
+}
+
+async function loadTools() {
+  try {
+    tools.value = await listTools()
+  } catch {
+    tools.value = []
+  }
+}
+
+async function loadApprovals() {
+  try {
+    approvals.value = await listApprovals()
+  } catch {
+    approvals.value = []
+  }
+}
+
+async function toggleApprovals() {
+  showApprovals.value = !showApprovals.value
+  if (showApprovals.value) await loadApprovals()
+}
+
+async function decideApproval(approvalId, decision) {
+  if (decision === 'approve') await approveRequest(approvalId)
+  if (decision === 'reject') await rejectRequest(approvalId)
+  await loadApprovals()
 }
 
 async function send(content) {
@@ -85,6 +155,11 @@ async function send(content) {
         if (!assistant.reasoning) assistant.reasoning = []
         assistant.reasoning.push(event.content)
       }
+      if (event.type === 'approval_required') {
+        if (!assistant.reasoning) assistant.reasoning = []
+        assistant.reasoning.push(`需要人工确认：${event.content}`)
+        await loadApprovals()
+      }
       if (event.type === 'delta') assistant.content += event.content
       if (event.type === 'completed') {
         assistant.content = event.content || assistant.content
@@ -110,6 +185,6 @@ async function send(content) {
 }
 
 onMounted(async () => {
-  await Promise.all([startConversation(), loadSkills()])
+  await Promise.all([startConversation(), loadSkills(), loadTools(), loadApprovals()])
 })
 </script>

@@ -87,6 +87,31 @@ def test_deep_agent_runner_uses_configured_system_prompt(monkeypatch, tmp_path):
     assert captured["system_prompt"] == "Custom prompt from disk"
 
 
+def test_deep_agent_runner_passes_tools_and_human_loop_config(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_create_deep_agent(**kwargs):
+        captured.update(kwargs)
+        return object()
+
+    def fake_tool():
+        return "ok"
+
+    monkeypatch.setattr(agent_module, "ChatOpenAI", FakeChatOpenAI)
+    monkeypatch.setattr(agent_module, "create_deep_agent", fake_create_deep_agent)
+
+    settings = Settings(MODEL_API_KEY="test-key", SKILLS_ENABLED=False)
+    DeepAgentRunner(
+        settings,
+        project_root=tmp_path,
+        tools=[fake_tool],
+        interrupt_on={"write_file": {"allowed_decisions": ["approve", "reject"]}},
+    )
+
+    assert captured["tools"] == [fake_tool]
+    assert captured["interrupt_on"]["write_file"]["allowed_decisions"] == ["approve", "reject"]
+
+
 async def test_deep_agent_runner_converts_todo_events_to_reasoning(monkeypatch, tmp_path, caplog):
     caplog.set_level("INFO", logger="app.chat.agent")
 

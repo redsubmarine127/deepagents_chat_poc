@@ -37,6 +37,32 @@ def test_list_skills_endpoint_returns_metadata():
     assert isinstance(response.json(), list)
 
 
+def test_list_tools_endpoint_returns_metadata():
+    client = TestClient(app)
+
+    response = client.get("/api/tools")
+
+    assert response.status_code == 200
+    assert isinstance(response.json(), list)
+
+
+def test_human_loop_approval_endpoints():
+    client = TestClient(app)
+
+    created = client.post(
+        "/api/human-loop/approvals",
+        json={"toolName": "write_file", "description": "Write file", "payload": {"path": "/tmp/a.txt"}},
+    )
+    approval_id = created.json()["id"]
+    listed = client.get("/api/human-loop/approvals")
+    approved = client.post(f"/api/human-loop/approvals/{approval_id}/approve")
+
+    assert created.status_code == 200
+    assert listed.status_code == 200
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "approved"
+
+
 def test_stream_without_api_key_returns_failed_event():
     client = TestClient(app)
     conversation_id = client.post("/api/conversations").json()["id"]

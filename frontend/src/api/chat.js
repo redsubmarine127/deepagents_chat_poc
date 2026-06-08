@@ -18,6 +18,30 @@ export async function listSkills() {
   return response.json()
 }
 
+export async function listTools() {
+  const response = await fetch(`${API_BASE_URL}/api/tools`)
+  if (!response.ok) throw new Error('Unable to load tools')
+  return response.json()
+}
+
+export async function listApprovals() {
+  const response = await fetch(`${API_BASE_URL}/api/human-loop/approvals`)
+  if (!response.ok) throw new Error('Unable to load approvals')
+  return response.json()
+}
+
+export async function approveRequest(approvalId) {
+  const response = await fetch(`${API_BASE_URL}/api/human-loop/approvals/${approvalId}/approve`, { method: 'POST' })
+  if (!response.ok) throw new Error('Unable to approve request')
+  return response.json()
+}
+
+export async function rejectRequest(approvalId) {
+  const response = await fetch(`${API_BASE_URL}/api/human-loop/approvals/${approvalId}/reject`, { method: 'POST' })
+  if (!response.ok) throw new Error('Unable to reject request')
+  return response.json()
+}
+
 export async function streamMessage(conversationId, content, onEvent) {
   const response = await fetch(`${API_BASE_URL}/api/conversations/${conversationId}/messages/stream`, {
     method: 'POST',

@@ -14,6 +14,10 @@
           <li v-for="(item, index) in message.reasoning" :key="index">{{ item }}</li>
         </ol>
       </details>
+      <div v-if="message.approvals?.length" class="approval-panel">
+        <strong>需要人工确认</strong>
+        <span v-for="approval in message.approvals" :key="approval.approvalId">{{ approval.content }}</span>
+      </div>
       <div class="message-content">{{ message.content }}</div>
     </article>
   </div>

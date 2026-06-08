@@ -72,6 +72,10 @@ class ChatService:
                     # Reasoning traces are live execution metadata for the UI, not assistant answer text.
                     yield stream_reasoning(content_chunk, message_id=assistant.id)
                     continue
+                if event_type == ChatStreamEventType.APPROVAL_REQUIRED:
+                    chat_event["messageId"] = assistant.id
+                    yield chat_event
+                    continue
                 if event_type != ChatStreamEventType.DELTA:
                     continue
 

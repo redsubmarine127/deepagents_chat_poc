@@ -48,3 +48,13 @@ def test_settings_reads_agent_max_retries(monkeypatch):
     settings = Settings()
 
     assert settings.agent_max_retries == 5
+
+
+def test_settings_reads_tool_loading_environment(monkeypatch):
+    monkeypatch.setenv("TOOLS_ENABLED", "false")
+    monkeypatch.setenv("TOOLS_DIR", "custom-tools")
+
+    settings = Settings()
+
+    assert settings.tools_enabled is False
+    assert settings.tools_dir == "custom-tools"

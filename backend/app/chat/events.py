@@ -8,6 +8,7 @@ class ChatStreamEventType(StrEnum):
     DELTA = "delta"
     COMPLETED = "completed"
     FAILED = "failed"
+    APPROVAL_REQUIRED = "approval_required"
 
 
 class ChatStreamEvent(TypedDict):
@@ -15,6 +16,8 @@ class ChatStreamEvent(TypedDict):
     content: str
     # Agent-level events do not know the persisted assistant message id; ChatService adds it before SSE output.
     messageId: NotRequired[str]
+    approvalId: NotRequired[str]
+    toolName: NotRequired[str]
 
 
 def stream_event(
@@ -47,3 +50,16 @@ def stream_completed(content: str, *, message_id: str) -> ChatStreamEvent:
 
 def stream_failed(content: str, *, message_id: str = "") -> ChatStreamEvent:
     return stream_event(ChatStreamEventType.FAILED, content, message_id=message_id)
+
+
+def stream_approval_required(
+    content: str,
+    *,
+    approval_id: str,
+    tool_name: str,
+    message_id: str | None = None,
+) -> ChatStreamEvent:
+    payload = stream_event(ChatStreamEventType.APPROVAL_REQUIRED, content, message_id=message_id)
+    payload["approvalId"] = approval_id
+    payload["toolName"] = tool_name
+    return payload
