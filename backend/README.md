@@ -74,6 +74,77 @@ Content-Type: application/json
 - `POST /api/conversations` is no longer used as a standalone conversation creation endpoint.
 - `GET /api/conversations/{conversation_id}/messages` remains available for message history.
 
+### Request/Response Examples
+
+Streaming request:
+
+```json
+{
+  "sessionId": "session-001",
+  "streamFlag": "stream",
+  "query": "请介绍一下当前能力",
+  "messageId": "turn-001",
+  "globalUserId": "user-001",
+  "userAccount": "demo-account",
+  "payload": {
+    "channel": "web"
+  }
+}
+```
+
+Streaming response frames use SSE. Each `data:` line is one JSON event:
+
+```text
+data: {"sessionId":"session-001","messageId":"turn-001","state":"THINKING","stateDesc":"思考中","log":"chat.stream.started"}
+
+data: {"sessionId":"session-001","messageId":"turn-001","content":"<think>已创建任务上下文，开始调用 Agent</think>","processResult":{"content":"已创建任务上下文，开始调用 Agent"},"log":"chat.thinking.delta"}
+
+data: {"sessionId":"session-001","messageId":"turn-001","state":"GENERATE","stateDesc":"生成答案","log":"chat.generate.start"}
+
+data: {"sessionId":"session-001","messageId":"turn-001","content":"你好，我可以帮你分析需求、调用已加载工具并生成回答。","log":"chat.generate.delta"}
+
+data: {"sessionId":"session-001","messageId":"turn-001","endFlag":true,"log":"chat.stream.completed"}
+```
+
+Non-streaming request:
+
+```json
+{
+  "sessionId": "session-001",
+  "streamFlag": "nonStream",
+  "query": "请介绍一下当前能力",
+  "messageId": "turn-002",
+  "globalUserId": "user-001",
+  "userAccount": "demo-account",
+  "payload": {
+    "channel": "web"
+  }
+}
+```
+
+Non-streaming response:
+
+```json
+{
+  "sessionId": "session-001",
+  "messageId": "turn-002",
+  "content": "你好，我可以帮你分析需求、调用已加载工具并生成回答。",
+  "log": "chat.stream.completed",
+  "endFlag": true,
+  "payload": {
+    "channel": "web"
+  }
+}
+```
+
+Failed streaming response example:
+
+```text
+data: {"sessionId":"session-001","messageId":"turn-003","state":"THINKING","stateDesc":"思考中","log":"chat.stream.started"}
+
+data: {"sessionId":"session-001","messageId":"turn-003","error":"生成失败，请稍后重试。错误信息：MODEL_API_KEY is required for remote model streaming.","endFlag":true,"log":"chat.stream.failed"}
+```
+
 ## Runtime
 
 `app.main:create_app()` builds the FastAPI app through `app.runtime.build_runtime()`. Runtime assembly creates:
