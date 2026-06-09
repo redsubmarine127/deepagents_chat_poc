@@ -16,6 +16,17 @@ def test_create_conversation_and_append_messages():
     assert repository.get_messages(conversation.id)[0].content == "hello"
 
 
+def test_ensure_conversation_creates_with_requested_id():
+    repository = InMemoryConversationRepository()
+
+    conversation = repository.ensure_conversation("external-session-1")
+    again = repository.ensure_conversation("external-session-1")
+
+    assert conversation.id == "external-session-1"
+    assert again.id == "external-session-1"
+    assert len(repository.list_conversations()) == 1
+
+
 def test_unknown_conversation_raises():
     repository = InMemoryConversationRepository()
 

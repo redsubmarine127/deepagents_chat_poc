@@ -87,7 +87,7 @@ def test_deep_agent_runner_uses_configured_system_prompt(monkeypatch, tmp_path):
     assert captured["system_prompt"] == "Custom prompt from disk"
 
 
-def test_deep_agent_runner_passes_tools_and_human_loop_config(monkeypatch, tmp_path):
+def test_deep_agent_runner_passes_tools(monkeypatch, tmp_path):
     captured = {}
 
     def fake_create_deep_agent(**kwargs):
@@ -105,42 +105,10 @@ def test_deep_agent_runner_passes_tools_and_human_loop_config(monkeypatch, tmp_p
         settings,
         project_root=tmp_path,
         tools=[fake_tool],
-        interrupt_on={"write_file": {"allowed_decisions": ["approve", "reject"]}},
     )
 
     assert captured["tools"] == [fake_tool]
-    assert captured["interrupt_on"]["write_file"]["allowed_decisions"] == ["approve", "reject"]
-
-
-def test_deepagents_interrupt_maps_to_approval_event():
-    event = _map_deepagents_event(
-        {
-            "data": {
-                "__interrupt__": [
-                    {
-                        "action_requests": [
-                            {
-                                "name": "write_file",
-                                "args": {"path": "/tmp/a.txt"},
-                                "description": "Review write",
-                            }
-                        ],
-                        "review_configs": [
-                            {
-                                "action_name": "write_file",
-                                "allowed_decisions": ["approve", "reject"],
-                            }
-                        ],
-                    }
-                ]
-            }
-        }
-    )
-
-    assert event["type"] == "approval_required"
-    assert event["toolName"] == "write_file"
-    assert event["payload"] == {"path": "/tmp/a.txt"}
-    assert event["allowedDecisions"] == ["approve", "reject"]
+    assert "interrupt_on" not in captured
 
 
 async def test_deep_agent_runner_converts_todo_events_to_reasoning(monkeypatch, tmp_path, caplog):

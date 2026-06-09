@@ -19,7 +19,6 @@ class Settings(BaseSettings):
     agent_max_retries: int = Field(default=3, alias="AGENT_MAX_RETRIES")
     tools_enabled: bool = Field(default=True, alias="TOOLS_ENABLED")
     tools_dir: str = Field(default="tools", alias="TOOLS_DIR")
-    human_loop_enabled: bool = Field(default=False, alias="HUMAN_LOOP_ENABLED")
 
     @property
     def cors_origins(self) -> list[str]:

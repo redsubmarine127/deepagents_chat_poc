@@ -30,7 +30,6 @@ def create_app() -> FastAPI:
             runtime.chat_service,
             runtime.skills,
             runtime.tool_catalog.metadata,
-            runtime.approval_store,
         )
     )
     return app

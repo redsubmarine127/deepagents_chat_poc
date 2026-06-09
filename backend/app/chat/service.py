@@ -13,8 +13,6 @@ from app.chat.events import (
 )
 from app.chat.retry import AgentRetryExhaustedError
 from app.chat.schemas import MessageStatus
-from app.human_loop.schemas import ApprovalDecisionType
-from app.human_loop.store import InMemoryApprovalStore, UnknownApprovalError
 from app.observability import summarize_text
 from app.storage.conversations import InMemoryConversationRepository
 
@@ -30,25 +28,15 @@ class AgentRunner(Protocol):
     ) -> AsyncIterator[ChatStreamEvent]:
         pass
 
-    async def resume(
-        self,
-        decisions: list[dict[str, Any]],
-        *,
-        thread_id: str,
-    ) -> AsyncIterator[ChatStreamEvent]:
-        pass
-
 
 class ChatService:
     def __init__(
         self,
         repository: InMemoryConversationRepository,
         agent_runner: AgentRunner,
-        approval_store: InMemoryApprovalStore,
     ) -> None:
         self._repository = repository
         self._agent_runner = agent_runner
-        self._approval_store = approval_store
 
     def stream_user_message(self, conversation_id: str, content: str) -> AsyncIterator[ChatStreamEvent]:
         text = content.strip()
@@ -70,6 +58,29 @@ class ChatService:
         )
         return self._stream_prepared_user_message(conversation_id, assistant.id, history)
 
+    async def complete_user_message(self, conversation_id: str, content: str) -> dict[str, Any]:
+        assistant_message_id = ""
+        final_content = ""
+        status = MessageStatus.COMPLETED
+
+        async for event in self.stream_user_message(conversation_id, content):
+            if event.get("messageId"):
+                assistant_message_id = event["messageId"]
+
+            event_type = event.get("type")
+            if event_type == ChatStreamEventType.COMPLETED:
+                final_content = event.get("content", "")
+                status = MessageStatus.COMPLETED
+            elif event_type == ChatStreamEventType.FAILED:
+                final_content = event.get("content", "")
+                status = MessageStatus.FAILED
+
+        return {
+            "assistant_message_id": assistant_message_id,
+            "content": final_content,
+            "status": status,
+        }
+
     async def _stream_prepared_user_message(
         self,
         conversation_id: str,
@@ -84,35 +95,6 @@ class ChatService:
                 yield chat_event
         except Exception as exc:
             async for failure_event in self._handle_stream_failure(conversation_id, assistant_message_id, exc):
-                yield failure_event
-
-    async def stream_approval_decision(
-        self,
-        approval_id: str,
-        decision: ApprovalDecisionType,
-        message: str = "",
-    ) -> AsyncIterator[ChatStreamEvent]:
-        approval = self._approval_store.decide(approval_id, decision, message=message)
-        if not approval.conversation_id or not approval.message_id:
-            raise UnknownApprovalError(approval_id)
-
-        logger.info(
-            "chat.approval.resume conversation_id=%s assistant_message_id=%s approval_id=%s decision=%s",
-            approval.conversation_id,
-            approval.message_id,
-            approval.id,
-            decision,
-        )
-        resume_decision: dict[str, Any] = {"type": decision.value}
-        if decision == ApprovalDecisionType.REJECT:
-            resume_decision["message"] = message or "用户拒绝执行该操作。"
-
-        try:
-            agent_events = self._agent_runner.resume([resume_decision], thread_id=approval.conversation_id)
-            async for chat_event in self._relay_agent_events(approval.conversation_id, approval.message_id, agent_events):
-                yield chat_event
-        except Exception as exc:
-            async for failure_event in self._handle_stream_failure(approval.conversation_id, approval.message_id, exc):
                 yield failure_event
 
     async def _relay_agent_events(
@@ -130,10 +112,6 @@ class ChatService:
                 # Reasoning traces are live execution metadata for the UI, not assistant answer text.
                 yield stream_reasoning(content_chunk, message_id=assistant_message_id)
                 continue
-            if event_type == ChatStreamEventType.APPROVAL_REQUIRED:
-                approval_event = self._create_approval_event(conversation_id, assistant_message_id, chat_event)
-                yield approval_event
-                return
             if event_type != ChatStreamEventType.DELTA:
                 continue
 
@@ -167,34 +145,6 @@ class ChatService:
         )
         yield stream_completed(final_content, message_id=assistant_message_id)
 
-    def _create_approval_event(
-        self,
-        conversation_id: str,
-        assistant_message_id: str,
-        chat_event: ChatStreamEvent,
-    ) -> ChatStreamEvent:
-        allowed_decisions = _parse_allowed_decisions(chat_event.get("allowedDecisions", ["approve", "reject"]))
-        approval = self._approval_store.create_approval(
-            conversation_id=conversation_id,
-            message_id=assistant_message_id,
-            tool_name=chat_event.get("toolName", "unknown"),
-            description=chat_event.get("content", ""),
-            payload=chat_event.get("payload", {}),
-            allowed_decisions=allowed_decisions or [ApprovalDecisionType.APPROVE, ApprovalDecisionType.REJECT],
-        )
-        self._repository.update_message(conversation_id, assistant_message_id, status=MessageStatus.PENDING_APPROVAL)
-        logger.info(
-            "chat.approval.created conversation_id=%s assistant_message_id=%s approval_id=%s tool_name=%s",
-            conversation_id,
-            assistant_message_id,
-            approval.id,
-            approval.tool_name,
-        )
-        chat_event["messageId"] = assistant_message_id
-        chat_event["approvalId"] = approval.id
-        chat_event["allowedDecisions"] = [decision.value for decision in approval.allowed_decisions]
-        return chat_event
-
     async def _handle_stream_failure(
         self,
         conversation_id: str,
@@ -219,13 +169,3 @@ class ChatService:
             status=MessageStatus.FAILED,
         )
         yield stream_failed(failure, message_id=assistant_message_id)
-
-
-def _parse_allowed_decisions(values: list[str]) -> list[ApprovalDecisionType]:
-    decisions: list[ApprovalDecisionType] = []
-    for value in values:
-        try:
-            decisions.append(ApprovalDecisionType(value))
-        except ValueError:
-            logger.warning("chat.approval.skip_unknown_decision value=%s", value)
-    return decisions

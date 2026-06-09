@@ -67,15 +67,3 @@ def test_settings_reads_tool_loading_environment(monkeypatch):
 
     assert settings.tools_enabled is False
     assert settings.tools_dir == "custom-tools"
-
-
-def test_settings_reads_human_loop_environment(monkeypatch):
-    settings = Settings()
-
-    assert settings.human_loop_enabled is False
-
-    monkeypatch.setenv("HUMAN_LOOP_ENABLED", "true")
-
-    enabled_settings = Settings()
-
-    assert enabled_settings.human_loop_enabled is True

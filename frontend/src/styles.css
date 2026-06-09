@@ -85,36 +85,6 @@ textarea {
   padding: 8px;
 }
 
-.approval-item {
-  display: grid;
-  gap: 5px;
-  padding: 8px;
-}
-
-.approval-item + .approval-item {
-  border-top: 1px solid #edf1f3;
-}
-
-.approval-item small {
-  color: #66737a;
-  text-transform: uppercase;
-}
-
-.approval-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.approval-actions button {
-  min-width: 72px;
-  height: 30px;
-  border: 1px solid #c9d2d7;
-  border-radius: 6px;
-  background: #ffffff;
-  color: #33424a;
-  cursor: pointer;
-}
-
 .skill-item + .skill-item {
   border-top: 1px solid #edf1f3;
 }
@@ -207,18 +177,6 @@ textarea {
   color: #586970;
   font-size: 12px;
   line-height: 1.45;
-}
-
-.approval-panel {
-  display: grid;
-  gap: 5px;
-  margin: 8px 0 10px;
-  padding: 8px 10px;
-  border: 1px solid #e3c667;
-  border-radius: 8px;
-  background: #fff8dd;
-  color: #5f4c12;
-  font-size: 12px;
 }
 
 .message-content {

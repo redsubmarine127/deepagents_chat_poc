@@ -1,6 +1,6 @@
 # DeepAgents Chat POC
 
-一个轻量级智能对话系统 POC。前端使用 Vue + Vite，后端使用 Python + FastAPI + DeepAgents，支持 OpenAI 兼容模型配置、SSE 流式输出、按需加载 Skill、从文件加载 agent system prompt、本地 tool 加载，以及基于内存 checkpoint 的 human-in-the-loop 审批恢复流程。
+一个轻量级智能对话系统 POC。前端使用 Vue + Vite，后端使用 Python + FastAPI + DeepAgents，支持 OpenAI 兼容模型配置、SSE 流式输出、按需加载 Skill、从文件加载 agent system prompt，以及本地 tool 加载。
 
 ## 技术栈
 
@@ -39,7 +39,6 @@ SYSTEM_PROMPT_PATH=prompts/system.md
 AGENT_MAX_RETRIES=3
 TOOLS_ENABLED=true
 TOOLS_DIR=tools
-HUMAN_LOOP_ENABLED=false
 ```
 
 说明：
@@ -56,7 +55,6 @@ HUMAN_LOOP_ENABLED=false
 - `AGENT_MAX_RETRIES`: Agent 执行失败时的最大尝试次数，默认 `3`。
 - `TOOLS_ENABLED`: 是否加载本地 tool，默认 `true`。
 - `TOOLS_DIR`: Tool 目录，默认从项目根目录下的 `tools/` 加载。
-- `HUMAN_LOOP_ENABLED`: 是否启用 `write_file`、`edit_file` 的人工审批中断，默认 `false`。
 
 ### 2. 启动后端
 
@@ -101,7 +99,39 @@ cd frontend
 npm run build
 ```
 
-## Tool 与 Human-in-the-loop
+## 对话 API
+
+发送消息统一使用一个接口，后端会根据 `sessionId` 自动创建或复用会话：
+
+```http
+POST /api/conversations/messages
+Content-Type: application/json
+```
+
+```json
+{
+  "sessionId": "session-001",
+  "streamFlag": "stream",
+  "query": "你好",
+  "messageId": "turn-001",
+  "globalUserId": "user-001",
+  "userAccount": "demo-account",
+  "payload": {}
+}
+```
+
+- 前端首次发送前会默认生成一个 `sessionId`；后端仍兼容 `sessionId` 为空时自动生成新会话 ID。传入未知 `sessionId` 时，后端使用该 ID 创建新会话；传入已有 `sessionId` 时继续该会话。
+- `streamFlag=stream` 返回 `text/event-stream`，SSE 事件使用统一出参字段，并包含 `sessionId` 和 `messageId`。
+- `streamFlag=nonStream` 返回 JSON，包含统一出参字段，并包含 `sessionId`、`messageId` 和 `payload`。
+- 统一出参字段包括 `state`、`stateDesc`、`content`、`processResult`、`searchList`、`log`、`endFlag` 和 `error`；字段无值时可以不返回。
+- 除 `processResult` 为 JSON、`searchList` 为 list、`endFlag` 结束时为 `true` 外，其他字段默认使用 string。
+- `state` 值集为 `THINKING`、`GENERATE`，会作为独立状态帧在思考开始、生成答案开始等阶段边界返回，不和内容片段混在同一个帧里。
+- `THINKING` 内容帧的 `content` 使用 `<think>...</think>` 包裹。
+- `messageId` 是调用方传入的每轮交互 ID，响应原样返回；后端内部 assistant 消息 ID 不再作为对话接口字段暴露。
+- `POST /api/conversations` 不再作为独立创建会话接口使用。
+- `GET /api/conversations/{conversation_id}/messages` 仍用于读取历史消息。
+
+## Tool 加载
 
 Tool 默认从 `tools/` 目录加载。每个 tool 使用一个子目录，包含：
 
@@ -117,14 +147,7 @@ tools/
 - `GET /api/tools` 返回已发现的 tool metadata。
 - 有效 tool 会传入 DeepAgents。
 - Tool metadata 包含 `available` 和 `loadError`，坏 tool 会标记为不可用、写入 warning 日志，并不会阻塞其他 tool。
-
-Human-in-the-loop 当前是进程内存版，默认关闭：
-
-- 设置 `HUMAN_LOOP_ENABLED=true` 后，DeepAgents 才会对 `write_file`、`edit_file` 配置人工审批。
-- 默认 `HUMAN_LOOP_ENABLED=false` 时，后端不会向 DeepAgents 传入 `interrupt_on`，写入类工具不会触发审批中断。
-- 触发 interrupt 时，后端会创建 approval 记录并向前端发送 `approval_required` SSE 事件。
-- 前端 Approvals 菜单展示 pending approval，点击 approve/reject 后会调用审批续跑 SSE 端点。
-- 后端使用 LangGraph `InMemorySaver`，因此审批恢复只保证当前后端进程生命周期内可用。
+- `dev_zfs` 分支已移除 human-in-the-loop 审批流程；后端不再注册审批接口，前端不再展示 Approvals 菜单。
 
 ## 运行日志
 
@@ -133,7 +156,7 @@ Human-in-the-loop 当前是进程内存版，默认关闭：
 - 对话请求开始、上下文数量、流式输出片段、完成和失败。
 - DeepAgents 初始化、模型流式输出、工具调用开始和结束。
 - Skill 目录解析、缺失目录、发现的 skill 数量和 skill id。
-- Tool catalog 解析、坏 tool 跳过、approval 创建与审批恢复。
+- Tool catalog 解析、坏 tool 跳过。
 
 日志会对长文本做截断摘要，并对 payload 中的 `api_key`、`token`、`secret`、`password` 等敏感字段脱敏。
 
@@ -145,7 +168,6 @@ Human-in-the-loop 当前是进程内存版，默认关闭：
 │   ├── app/
 │   │   ├── api/                 # FastAPI 路由，包含会话、健康检查、skill metadata API
 │   │   ├── chat/                # 对话核心逻辑、DeepAgents runner、SSE 事件、schema
-│   │   ├── human_loop/          # 内存审批 store、schema、HITL 配置
 │   │   ├── skills/              # Skill metadata 加载与目录解析
 │   │   ├── storage/             # 内存会话与消息存储
 │   │   ├── tools/               # Tool metadata 与执行模块加载

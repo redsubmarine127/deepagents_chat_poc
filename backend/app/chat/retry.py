@@ -1,6 +1,6 @@
 from collections.abc import AsyncIterator
 import logging
-from typing import Any, Protocol
+from typing import Protocol
 
 from app.chat.events import ChatStreamEvent, ChatStreamEventType, stream_reasoning
 from app.observability import summarize_text
@@ -21,14 +21,6 @@ class AgentRunner(Protocol):
         messages: list[dict[str, str]],
         *,
         thread_id: str | None = None,
-    ) -> AsyncIterator[ChatStreamEvent]:
-        pass
-
-    async def resume(
-        self,
-        decisions: list[dict[str, Any]],
-        *,
-        thread_id: str,
     ) -> AsyncIterator[ChatStreamEvent]:
         pass
 
@@ -71,12 +63,3 @@ class RetryingAgentRunner:
                     yield stream_reasoning(f"Agent 执行失败，正在重试 {attempt + 1}/{self._max_attempts}")
 
         raise AgentRetryExhaustedError(self._max_attempts, last_error or RuntimeError("unknown agent failure"))
-
-    async def resume(
-        self,
-        decisions: list[dict[str, Any]],
-        *,
-        thread_id: str,
-    ) -> AsyncIterator[ChatStreamEvent]:
-        async for chat_event in self._runner.resume(decisions, thread_id=thread_id):
-            yield chat_event

@@ -1,11 +1,5 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8090'
 
-export async function createConversation() {
-  const response = await fetch(`${API_BASE_URL}/api/conversations`, { method: 'POST' })
-  if (!response.ok) throw new Error('Unable to create conversation')
-  return response.json()
-}
-
 export async function listMessages(conversationId) {
   const response = await fetch(`${API_BASE_URL}/api/conversations/${conversationId}/messages`)
   if (!response.ok) throw new Error('Unable to load messages')
@@ -24,42 +18,19 @@ export async function listTools() {
   return response.json()
 }
 
-export async function listApprovals() {
-  const response = await fetch(`${API_BASE_URL}/api/human-loop/approvals`)
-  if (!response.ok) throw new Error('Unable to load approvals')
-  return response.json()
-}
-
-export async function approveRequest(approvalId) {
-  const response = await fetch(`${API_BASE_URL}/api/human-loop/approvals/${approvalId}/approve`, { method: 'POST' })
-  if (!response.ok) throw new Error('Unable to approve request')
-  return response.json()
-}
-
-export async function rejectRequest(approvalId) {
-  const response = await fetch(`${API_BASE_URL}/api/human-loop/approvals/${approvalId}/reject`, { method: 'POST' })
-  if (!response.ok) throw new Error('Unable to reject request')
-  return response.json()
-}
-
-export async function streamApprovalDecision(approvalId, decision, onEvent) {
-  const path = decision === 'reject' ? 'reject' : 'approve'
-  const body = decision === 'reject' ? JSON.stringify({}) : undefined
-  const response = await fetch(`${API_BASE_URL}/api/human-loop/approvals/${approvalId}/${path}/stream`, {
+export async function streamMessage(sessionId, content, messageId, onEvent) {
+  const response = await fetch(`${API_BASE_URL}/api/conversations/messages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body
-  })
-  if (!response.ok || !response.body) throw new Error('Unable to resume approval request')
-
-  await readEventStream(response, onEvent)
-}
-
-export async function streamMessage(conversationId, content, onEvent) {
-  const response = await fetch(`${API_BASE_URL}/api/conversations/${conversationId}/messages/stream`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content })
+    body: JSON.stringify({
+      sessionId,
+      streamFlag: 'stream',
+      query: content,
+      messageId,
+      globalUserId: 'local-user',
+      userAccount: 'local-account',
+      payload: {}
+    })
   })
   if (!response.ok || !response.body) throw new Error('Unable to start message stream')
 

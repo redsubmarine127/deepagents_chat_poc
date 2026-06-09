@@ -15,7 +15,7 @@ class ConversationBusyError(Exception):
     pass
 
 
-ACTIVE_ASSISTANT_STATUSES = {MessageStatus.STREAMING, MessageStatus.PENDING_APPROVAL}
+ACTIVE_ASSISTANT_STATUSES = {MessageStatus.STREAMING}
 
 
 class InMemoryConversationRepository:
@@ -28,12 +28,21 @@ class InMemoryConversationRepository:
         with self._lock:
             return sorted(self._conversations.values(), key=lambda item: item.updated_at, reverse=True)
 
-    def create_conversation(self) -> Conversation:
+    def create_conversation(self, conversation_id: str | None = None) -> Conversation:
         with self._lock:
-            conversation = Conversation()
+            if conversation_id and conversation_id in self._conversations:
+                return self._conversations[conversation_id]
+            conversation = Conversation(id=conversation_id) if conversation_id else Conversation()
             self._conversations[conversation.id] = conversation
             self._messages[conversation.id] = []
             return conversation
+
+    def ensure_conversation(self, conversation_id: str | None = None) -> Conversation:
+        normalized_id = conversation_id.strip() if conversation_id else ""
+        with self._lock:
+            if normalized_id and normalized_id in self._conversations:
+                return self._conversations[normalized_id]
+            return self.create_conversation(normalized_id or None)
 
     def get_conversation(self, conversation_id: str) -> Conversation:
         with self._lock:

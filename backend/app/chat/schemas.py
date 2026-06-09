@@ -1,8 +1,9 @@
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import Any
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 def now_utc() -> datetime:
@@ -16,9 +17,13 @@ class MessageRole(StrEnum):
 
 class MessageStatus(StrEnum):
     STREAMING = "streaming"
-    PENDING_APPROVAL = "pending_approval"
     COMPLETED = "completed"
     FAILED = "failed"
+
+
+class StreamFlag(StrEnum):
+    STREAM = "stream"
+    NON_STREAM = "nonStream"
 
 
 class Conversation(BaseModel):
@@ -55,8 +60,30 @@ class MessageResponse(BaseModel):
     updatedAt: datetime
 
 
-class SendMessageRequest(BaseModel):
-    content: str = Field(min_length=1)
+class ChatMessageRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sessionId: str = ""
+    streamFlag: StreamFlag
+    query: str = Field(min_length=1)
+    messageId: str = Field(min_length=1)
+    globalUserId: str = ""
+    userAccount: str = ""
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class ChatMessageResponse(BaseModel):
+    sessionId: str
+    messageId: str
+    state: str = ""
+    stateDesc: str = ""
+    content: str = ""
+    processResult: dict[str, Any] = Field(default_factory=dict)
+    searchList: list[dict[str, Any]] = Field(default_factory=list)
+    log: str = ""
+    endFlag: str | bool = ""
+    error: str = ""
+    payload: dict[str, Any] = Field(default_factory=dict)
 
 
 def to_conversation_response(conversation: Conversation) -> ConversationResponse:
