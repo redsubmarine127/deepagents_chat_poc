@@ -1,6 +1,6 @@
 from collections.abc import AsyncIterator
 import logging
-from typing import Protocol
+from typing import Any, Protocol
 
 from app.chat.events import ChatStreamEvent, ChatStreamEventType, stream_reasoning
 from app.observability import summarize_text
@@ -16,7 +16,20 @@ class AgentRetryExhaustedError(Exception):
 
 
 class AgentRunner(Protocol):
-    async def stream(self, messages: list[dict[str, str]]) -> AsyncIterator[ChatStreamEvent]:
+    async def stream(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        thread_id: str | None = None,
+    ) -> AsyncIterator[ChatStreamEvent]:
+        pass
+
+    async def resume(
+        self,
+        decisions: list[dict[str, Any]],
+        *,
+        thread_id: str,
+    ) -> AsyncIterator[ChatStreamEvent]:
         pass
 
 
@@ -25,13 +38,18 @@ class RetryingAgentRunner:
         self._runner = runner
         self._max_attempts = max(1, max_attempts)
 
-    async def stream(self, messages: list[dict[str, str]]) -> AsyncIterator[ChatStreamEvent]:
+    async def stream(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        thread_id: str | None = None,
+    ) -> AsyncIterator[ChatStreamEvent]:
         last_error: Exception | None = None
         for attempt in range(1, self._max_attempts + 1):
             emitted_delta = False
             try:
                 logger.info("agent.retry.attempt_start attempt=%d max_attempts=%d", attempt, self._max_attempts)
-                async for chat_event in self._runner.stream(messages):
+                async for chat_event in self._runner.stream(messages, thread_id=thread_id):
                     if chat_event.get("type") == ChatStreamEventType.DELTA:
                         emitted_delta = True
                     yield chat_event
@@ -53,3 +71,12 @@ class RetryingAgentRunner:
                     yield stream_reasoning(f"Agent 执行失败，正在重试 {attempt + 1}/{self._max_attempts}")
 
         raise AgentRetryExhaustedError(self._max_attempts, last_error or RuntimeError("unknown agent failure"))
+
+    async def resume(
+        self,
+        decisions: list[dict[str, Any]],
+        *,
+        thread_id: str,
+    ) -> AsyncIterator[ChatStreamEvent]:
+        async for chat_event in self._runner.resume(decisions, thread_id=thread_id):
+            yield chat_event

@@ -1,6 +1,6 @@
 <template>
   <div class="messages">
-    <div v-if="messages.length === 0" class="empty-state">开始一段对话</div>
+    <div v-if="messages.length === 0" class="empty-state">{{ emptyText }}</div>
     <article
       v-for="message in messages"
       :key="message.id"
@@ -25,6 +25,7 @@
 
 <script setup>
 defineProps({
-  messages: { type: Array, required: true }
+  messages: { type: Array, required: true },
+  emptyText: { type: String, default: '开始一段对话' }
 })
 </script>

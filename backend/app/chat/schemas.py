@@ -16,6 +16,7 @@ class MessageRole(StrEnum):
 
 class MessageStatus(StrEnum):
     STREAMING = "streaming"
+    PENDING_APPROVAL = "pending_approval"
     COMPLETED = "completed"
     FAILED = "failed"
 

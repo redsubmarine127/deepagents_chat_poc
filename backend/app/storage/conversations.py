@@ -43,6 +43,14 @@ class InMemoryConversationRepository:
             self._get_conversation_unlocked(conversation_id)
             return list(self._messages[conversation_id])
 
+    def get_message(self, conversation_id: str, message_id: str) -> Message:
+        with self._lock:
+            self._get_conversation_unlocked(conversation_id)
+            for message in self._messages[conversation_id]:
+                if message.id == message_id:
+                    return message
+            raise UnknownMessageError(message_id)
+
     def append_message(
         self,
         conversation_id: str,

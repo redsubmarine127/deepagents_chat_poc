@@ -51,8 +51,8 @@
       </div>
     </header>
 
-    <MessageList :messages="messages" />
-    <MessageInput :disabled="isStreaming || !conversationId" @send="send" />
+    <MessageList :messages="messages" :empty-text="emptyText" />
+    <MessageInput :disabled="isInitializing || isStreaming || !conversationId" @send="send" />
   </main>
 </template>
 
@@ -66,6 +66,7 @@ import {
   listSkills,
   listTools,
   rejectRequest,
+  streamApprovalDecision,
   streamMessage
 } from '../api/chat'
 import MessageInput from './MessageInput.vue'
@@ -73,7 +74,9 @@ import MessageList from './MessageList.vue'
 
 const conversationId = ref('')
 const messages = ref([])
+const isInitializing = ref(true)
 const isStreaming = ref(false)
+const initError = ref('')
 const skills = ref([])
 const tools = ref([])
 const approvals = ref([])
@@ -81,11 +84,26 @@ const showSkills = ref(false)
 const showTools = ref(false)
 const showApprovals = ref(false)
 const pendingApprovals = computed(() => approvals.value.filter((approval) => approval.status === 'pending'))
+const emptyText = computed(() => {
+  if (initError.value) return initError.value
+  if (isInitializing.value) return '正在创建对话...'
+  return '开始一段对话'
+})
 
 async function startConversation() {
-  const conversation = await createConversation()
-  conversationId.value = conversation.id
-  messages.value = await listMessages(conversation.id)
+  isInitializing.value = true
+  initError.value = ''
+  try {
+    const conversation = await createConversation()
+    conversationId.value = conversation.id
+    messages.value = await listMessages(conversation.id)
+  } catch {
+    conversationId.value = ''
+    messages.value = []
+    initError.value = '对话初始化失败，请检查后端服务后点击 + 重试'
+  } finally {
+    isInitializing.value = false
+  }
 }
 
 async function loadSkills() {
@@ -118,9 +136,18 @@ async function toggleApprovals() {
 }
 
 async function decideApproval(approvalId, decision) {
-  if (decision === 'approve') await approveRequest(approvalId)
-  if (decision === 'reject') await rejectRequest(approvalId)
-  await loadApprovals()
+  if (isStreaming.value) return
+
+  isStreaming.value = true
+  try {
+    await streamApprovalDecision(approvalId, decision, handleStreamEvent)
+  } catch {
+    if (decision === 'approve') await approveRequest(approvalId)
+    if (decision === 'reject') await rejectRequest(approvalId)
+  } finally {
+    isStreaming.value = false
+    await loadApprovals()
+  }
 }
 
 async function send(content) {
@@ -136,40 +163,7 @@ async function send(content) {
   isStreaming.value = true
 
   try {
-    await streamMessage(conversationId.value, content, (event) => {
-      if (event.type === 'started') {
-        messages.value.push({
-          id: event.messageId,
-          conversationId: conversationId.value,
-          role: 'assistant',
-          content: '',
-          status: 'streaming',
-          reasoning: []
-        })
-      }
-
-      const assistant = messages.value.find((message) => message.id === event.messageId)
-      if (!assistant) return
-
-      if (event.type === 'reasoning') {
-        if (!assistant.reasoning) assistant.reasoning = []
-        assistant.reasoning.push(event.content)
-      }
-      if (event.type === 'approval_required') {
-        if (!assistant.reasoning) assistant.reasoning = []
-        assistant.reasoning.push(`需要人工确认：${event.content}`)
-        await loadApprovals()
-      }
-      if (event.type === 'delta') assistant.content += event.content
-      if (event.type === 'completed') {
-        assistant.content = event.content || assistant.content
-        assistant.status = 'completed'
-      }
-      if (event.type === 'failed') {
-        assistant.content = event.content
-        assistant.status = 'failed'
-      }
-    })
+    await streamMessage(conversationId.value, content, handleStreamEvent)
   } catch (error) {
     messages.value.push({
       id: crypto.randomUUID(),
@@ -184,7 +178,44 @@ async function send(content) {
   }
 }
 
+async function handleStreamEvent(event) {
+  if (event.type === 'started') {
+    messages.value.push({
+      id: event.messageId,
+      conversationId: conversationId.value,
+      role: 'assistant',
+      content: '',
+      status: 'streaming',
+      reasoning: []
+    })
+  }
+
+  const assistant = messages.value.find((message) => message.id === event.messageId)
+  if (!assistant) return
+
+  if (event.type === 'reasoning') {
+    if (!assistant.reasoning) assistant.reasoning = []
+    assistant.reasoning.push(event.content)
+  }
+  if (event.type === 'approval_required') {
+    if (!assistant.reasoning) assistant.reasoning = []
+    assistant.reasoning.push(`需要人工确认：${event.content}`)
+    assistant.status = 'pending_approval'
+    await loadApprovals()
+  }
+  if (event.type === 'delta') assistant.content += event.content
+  if (event.type === 'completed') {
+    assistant.content = event.content || assistant.content
+    assistant.status = 'completed'
+  }
+  if (event.type === 'failed') {
+    assistant.content = event.content
+    assistant.status = 'failed'
+  }
+}
+
 onMounted(async () => {
-  await Promise.all([startConversation(), loadSkills(), loadTools(), loadApprovals()])
+  await startConversation()
+  await Promise.all([loadSkills(), loadTools(), loadApprovals()])
 })
 </script>

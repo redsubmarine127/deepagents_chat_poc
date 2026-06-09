@@ -18,20 +18,33 @@ class InMemoryApprovalStore:
         with self._lock:
             return sorted(self._approvals.values(), key=lambda item: item.created_at, reverse=True)
 
+    def get_approval(self, approval_id: str) -> ApprovalRequest:
+        with self._lock:
+            approval = self._approvals.get(approval_id)
+            if approval is None:
+                raise UnknownApprovalError(approval_id)
+            return approval
+
     def create_approval(
         self,
         *,
         tool_name: str,
         description: str,
         payload: dict[str, Any],
+        conversation_id: str = "",
+        message_id: str = "",
+        allowed_decisions: list[ApprovalDecisionType] | None = None,
         node_key: str = "file_write",
     ) -> ApprovalRequest:
         with self._lock:
             approval = ApprovalRequest(
                 node_key=node_key,
+                conversation_id=conversation_id,
+                message_id=message_id,
                 tool_name=tool_name,
                 description=description,
                 payload=payload,
+                allowed_decisions=allowed_decisions or [ApprovalDecisionType.APPROVE, ApprovalDecisionType.REJECT],
             )
             self._approvals[approval.id] = approval
             return approval

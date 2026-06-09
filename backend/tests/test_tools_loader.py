@@ -1,4 +1,4 @@
-from app.tools.loader import discover_tools, load_tools
+from app.tools.loader import discover_tools, load_tool_catalog, load_tools
 
 
 def test_discover_tools_reads_metadata(tmp_path):
@@ -41,3 +41,16 @@ def test_load_tools_skips_bad_tool(tmp_path, caplog):
 
     assert len(tools) == 1
     assert "tools.skip" in "\n".join(record.getMessage() for record in caplog.records)
+
+
+def test_load_tool_catalog_returns_metadata_and_loaded_tools(tmp_path):
+    tool_dir = tmp_path / "tools" / "echo"
+    tool_dir.mkdir(parents=True)
+    (tool_dir / "TOOL.md").write_text("---\nname: echo\ndescription: Echo input.\n---\n", encoding="utf-8")
+    (tool_dir / "tool.py").write_text("def get_tool():\n    return lambda text: text\n", encoding="utf-8")
+
+    catalog = load_tool_catalog(tmp_path, "tools")
+
+    assert [tool.id for tool in catalog.metadata] == ["echo"]
+    assert len(catalog.tools) == 1
+    assert catalog.tools[0]("ok") == "ok"

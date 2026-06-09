@@ -20,5 +20,5 @@ def create_api_router(
     router.include_router(conversations.create_router(repository, chat_service))
     router.include_router(skills_api.create_router(skills))
     router.include_router(tools_api.create_router(tools))
-    router.include_router(human_loop.create_router(approval_store))
+    router.include_router(human_loop.create_router(approval_store, chat_service))
     return router

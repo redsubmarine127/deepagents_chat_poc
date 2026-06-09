@@ -42,6 +42,19 @@ export async function rejectRequest(approvalId) {
   return response.json()
 }
 
+export async function streamApprovalDecision(approvalId, decision, onEvent) {
+  const path = decision === 'reject' ? 'reject' : 'approve'
+  const body = decision === 'reject' ? JSON.stringify({}) : undefined
+  const response = await fetch(`${API_BASE_URL}/api/human-loop/approvals/${approvalId}/${path}/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body
+  })
+  if (!response.ok || !response.body) throw new Error('Unable to resume approval request')
+
+  await readEventStream(response, onEvent)
+}
+
 export async function streamMessage(conversationId, content, onEvent) {
   const response = await fetch(`${API_BASE_URL}/api/conversations/${conversationId}/messages/stream`, {
     method: 'POST',
@@ -50,6 +63,10 @@ export async function streamMessage(conversationId, content, onEvent) {
   })
   if (!response.ok || !response.body) throw new Error('Unable to start message stream')
 
+  await readEventStream(response, onEvent)
+}
+
+async function readEventStream(response, onEvent) {
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
@@ -64,7 +81,7 @@ export async function streamMessage(conversationId, content, onEvent) {
 
     for (const frame of frames) {
       const line = frame.split('\n').find((item) => item.startsWith('data: '))
-      if (line) onEvent(JSON.parse(line.slice(6)))
+      if (line) await onEvent(JSON.parse(line.slice(6)))
     }
   }
 }

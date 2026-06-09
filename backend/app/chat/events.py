@@ -1,5 +1,5 @@
 from enum import StrEnum
-from typing import NotRequired, TypedDict
+from typing import Any, NotRequired, TypedDict
 
 
 class ChatStreamEventType(StrEnum):
@@ -18,6 +18,8 @@ class ChatStreamEvent(TypedDict):
     messageId: NotRequired[str]
     approvalId: NotRequired[str]
     toolName: NotRequired[str]
+    payload: NotRequired[dict[str, Any]]
+    allowedDecisions: NotRequired[list[str]]
 
 
 def stream_event(
@@ -57,9 +59,15 @@ def stream_approval_required(
     *,
     approval_id: str,
     tool_name: str,
+    approval_payload: dict[str, Any] | None = None,
+    allowed_decisions: list[str] | None = None,
     message_id: str | None = None,
 ) -> ChatStreamEvent:
-    payload = stream_event(ChatStreamEventType.APPROVAL_REQUIRED, content, message_id=message_id)
-    payload["approvalId"] = approval_id
-    payload["toolName"] = tool_name
-    return payload
+    stream_payload = stream_event(ChatStreamEventType.APPROVAL_REQUIRED, content, message_id=message_id)
+    stream_payload["approvalId"] = approval_id
+    stream_payload["toolName"] = tool_name
+    if approval_payload is not None:
+        stream_payload["payload"] = approval_payload
+    if allowed_decisions is not None:
+        stream_payload["allowedDecisions"] = allowed_decisions
+    return stream_payload

@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    app_name: str = "DeepAgents Chat"
+    app_name: str = Field(default="DeepAgents Chat", alias="APP_NAME")
     model_id: str = Field(default="gpt-4o-mini", alias="MODEL_ID")
     model_base_url: str = Field(default="https://api.openai.com/v1", alias="MODEL_BASE_URL")
     model_api_key: str | None = Field(default=None, alias="MODEL_API_KEY")
@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     agent_max_retries: int = Field(default=3, alias="AGENT_MAX_RETRIES")
     tools_enabled: bool = Field(default=True, alias="TOOLS_ENABLED")
     tools_dir: str = Field(default="tools", alias="TOOLS_DIR")
+    human_loop_enabled: bool = Field(default=False, alias="HUMAN_LOOP_ENABLED")
 
     @property
     def cors_origins(self) -> list[str]:

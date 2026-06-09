@@ -7,7 +7,7 @@ class FailsThenSucceedsRunner:
     def __init__(self) -> None:
         self.calls = 0
 
-    async def stream(self, messages):
+    async def stream(self, messages, *, thread_id=None):
         self.calls += 1
         if self.calls < 3:
             raise RuntimeError("tool failed")
@@ -18,7 +18,7 @@ class AlwaysFailsRunner:
     def __init__(self) -> None:
         self.calls = 0
 
-    async def stream(self, messages):
+    async def stream(self, messages, *, thread_id=None):
         self.calls += 1
         raise RuntimeError("skill failed")
         yield
@@ -28,7 +28,7 @@ class DeltaThenFailsRunner:
     def __init__(self) -> None:
         self.calls = 0
 
-    async def stream(self, messages):
+    async def stream(self, messages, *, thread_id=None):
         self.calls += 1
         yield {"type": "delta", "content": "partial"}
         raise RuntimeError("late failure")

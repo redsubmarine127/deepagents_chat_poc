@@ -8,6 +8,7 @@ from uuid import uuid4
 from deepagents import create_deep_agent
 from deepagents.backends.filesystem import FilesystemBackend
 from deepagents.middleware.filesystem import FilesystemPermission
+from langgraph.types import Command
 from langchain_openai import ChatOpenAI
 
 from app.config import Settings
@@ -26,6 +27,7 @@ class DeepAgentRunner:
         project_root: Path | None = None,
         tools: list[Any] | None = None,
         interrupt_on: dict[str, Any] | None = None,
+        checkpointer: Any | None = None,
     ) -> None:
         if not settings.model_api_key:
             raise ValueError("MODEL_API_KEY is required for remote model streaming.")
@@ -59,19 +61,53 @@ class DeepAgentRunner:
             backend=backend,
             permissions=permissions,
             interrupt_on=interrupt_on,
+            checkpointer=checkpointer,
         )
 
-    async def stream(self, messages: list[dict[str, str]]) -> AsyncIterator[ChatStreamEvent]:
+    async def stream(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        thread_id: str | None = None,
+    ) -> AsyncIterator[ChatStreamEvent]:
         logger.info("agent.stream.start message_count=%d", len(messages))
         try:
-            async for raw_event in self._agent.astream_events({"messages": messages}, version="v2"):
-                chat_event = _map_deepagents_event(raw_event)
-                if chat_event is None:
-                    continue
-
+            async for chat_event in self._stream_agent_events(
+                {"messages": messages},
+                thread_id=thread_id,
+            ):
                 yield chat_event
         finally:
             logger.info("agent.stream.end message_count=%d", len(messages))
+
+    async def resume(
+        self,
+        decisions: list[dict[str, Any]],
+        *,
+        thread_id: str,
+    ) -> AsyncIterator[ChatStreamEvent]:
+        logger.info("agent.resume.start thread_id=%s decision_count=%d", thread_id, len(decisions))
+        try:
+            async for chat_event in self._stream_agent_events(
+                Command(resume={"decisions": decisions}),
+                thread_id=thread_id,
+            ):
+                yield chat_event
+        finally:
+            logger.info("agent.resume.end thread_id=%s decision_count=%d", thread_id, len(decisions))
+
+    async def _stream_agent_events(
+        self,
+        payload: Any,
+        *,
+        thread_id: str | None,
+    ) -> AsyncIterator[ChatStreamEvent]:
+        config = {"configurable": {"thread_id": thread_id}} if thread_id else None
+        async for raw_event in self._agent.astream_events(payload, config=config, version="v2"):
+            chat_event = _map_deepagents_event(raw_event)
+            if chat_event is None:
+                continue
+            yield chat_event
 
 
 class LazyDeepAgentRunner:
@@ -81,23 +117,45 @@ class LazyDeepAgentRunner:
         project_root: Path | None = None,
         tools: list[Any] | None = None,
         interrupt_on: dict[str, Any] | None = None,
+        checkpointer: Any | None = None,
     ) -> None:
         self._settings = settings
         self._project_root = project_root
         self._tools = tools
         self._interrupt_on = interrupt_on
+        self._checkpointer = checkpointer
         self._runner: DeepAgentRunner | None = None
 
-    async def stream(self, messages: list[dict[str, str]]) -> AsyncIterator[ChatStreamEvent]:
+    async def stream(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        thread_id: str | None = None,
+    ) -> AsyncIterator[ChatStreamEvent]:
+        runner = self._get_runner()
+        async for chat_event in runner.stream(messages, thread_id=thread_id):
+            yield chat_event
+
+    async def resume(
+        self,
+        decisions: list[dict[str, Any]],
+        *,
+        thread_id: str,
+    ) -> AsyncIterator[ChatStreamEvent]:
+        runner = self._get_runner()
+        async for chat_event in runner.resume(decisions, thread_id=thread_id):
+            yield chat_event
+
+    def _get_runner(self) -> DeepAgentRunner:
         if self._runner is None:
             self._runner = DeepAgentRunner(
                 self._settings,
                 project_root=self._project_root,
                 tools=self._tools,
                 interrupt_on=self._interrupt_on,
+                checkpointer=self._checkpointer,
             )
-        async for chat_event in self._runner.stream(messages):
-            yield chat_event
+        return self._runner
 
 
 def _map_deepagents_event(raw_event: dict[str, Any]) -> ChatStreamEvent | None:
@@ -167,11 +225,15 @@ def _map_interrupt_event(raw_event: dict[str, Any]) -> ChatStreamEvent | None:
     action = action_requests[0]
     tool_name = action.get("name", "unknown")
     description = action.get("description") or f"工具 {tool_name} 需要人工确认。"
+    review_configs = interrupt_payload.get("review_configs") or []
+    allowed_decisions = _extract_allowed_decisions(review_configs, tool_name)
     logger.info("agent.approval_required tool_name=%s description=%s", tool_name, summarize_text(description))
     return stream_approval_required(
         description,
         approval_id=str(uuid4()),
         tool_name=tool_name,
+        approval_payload=action.get("args") or {},
+        allowed_decisions=allowed_decisions,
     )
 
 
@@ -199,6 +261,17 @@ def _extract_interrupt_payload(raw_event: dict[str, Any]) -> dict[str, Any] | No
         if isinstance(candidate, dict):
             return candidate
     return None
+
+
+def _extract_allowed_decisions(review_configs: list[Any], tool_name: str) -> list[str]:
+    for config in review_configs:
+        action_name = config.get("action_name") if isinstance(config, dict) else getattr(config, "action_name", None)
+        if action_name and action_name != tool_name:
+            continue
+        decisions = config.get("allowed_decisions") if isinstance(config, dict) else getattr(config, "allowed_decisions", None)
+        if decisions:
+            return [str(decision) for decision in decisions]
+    return ["approve", "reject"]
 
 
 def _format_todo_payload(prefix: str, payload: Any) -> str:

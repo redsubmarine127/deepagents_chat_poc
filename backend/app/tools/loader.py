@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import importlib.util
 import logging
 from pathlib import Path
@@ -10,8 +11,42 @@ from app.tools.schemas import ToolMetadata
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class ToolCatalog:
+    metadata: list[ToolMetadata]
+    tools: list[Any]
+
+
 def discover_tools(root_dir: Path | str, tools_dir: str) -> list[ToolMetadata]:
+    return _discover_tool_metadata(Path(root_dir).resolve(), tools_dir)
+
+
+def load_tools(root_dir: Path | str, tools_dir: str) -> list[Any]:
+    return load_tool_catalog(root_dir, tools_dir).tools
+
+
+def load_tool_catalog(root_dir: Path | str, tools_dir: str) -> ToolCatalog:
     root = Path(root_dir).resolve()
+    metadata = _discover_tool_metadata(root, tools_dir)
+    loaded_tools: list[Any] = []
+    for tool_metadata in metadata:
+        tool_dir = root / Path(tool_metadata.path).parent
+        tool_file = tool_dir / "tool.py"
+        try:
+            loaded_tool = _load_tool_from_file(tool_file, tool_metadata.id)
+        except Exception as exc:
+            logger.warning("tools.skip id=%s path=%s error=%s", tool_metadata.id, tool_file, exc)
+            continue
+        loaded_tools.append(loaded_tool)
+    logger.info("tools.loaded count=%d", len(loaded_tools))
+    return ToolCatalog(metadata=metadata, tools=loaded_tools)
+
+
+def empty_tool_catalog() -> ToolCatalog:
+    return ToolCatalog(metadata=[], tools=[])
+
+
+def _discover_tool_metadata(root: Path, tools_dir: str) -> list[ToolMetadata]:
     source_dir = _resolve_tools_dir(root, tools_dir)
     logger.info("tools.resolve configured_dir=%s source_dir=%s", tools_dir, source_dir)
     if not source_dir.exists() or not source_dir.is_dir():
@@ -36,22 +71,6 @@ def discover_tools(root_dir: Path | str, tools_dir: str) -> list[ToolMetadata]:
         )
     logger.info("tools.discovered source_dir=%s count=%d tool_ids=%s", source_dir, len(tools), [tool.id for tool in tools])
     return tools
-
-
-def load_tools(root_dir: Path | str, tools_dir: str) -> list[Any]:
-    root = Path(root_dir).resolve()
-    loaded_tools: list[Any] = []
-    for metadata in discover_tools(root, tools_dir):
-        tool_dir = root / Path(metadata.path).parent
-        tool_file = tool_dir / "tool.py"
-        try:
-            loaded_tool = _load_tool_from_file(tool_file, metadata.id)
-        except Exception as exc:
-            logger.warning("tools.skip id=%s path=%s error=%s", metadata.id, tool_file, exc)
-            continue
-        loaded_tools.append(loaded_tool)
-    logger.info("tools.loaded count=%d", len(loaded_tools))
-    return loaded_tools
 
 
 def _resolve_tools_dir(root: Path, tools_dir: str) -> Path:

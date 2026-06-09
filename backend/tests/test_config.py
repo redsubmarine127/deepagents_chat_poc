@@ -1,11 +1,20 @@
 from app.config import Settings
 
 
+def test_settings_reads_app_name_environment(monkeypatch):
+    monkeypatch.setenv("APP_NAME", "Custom Chat")
+
+    settings = Settings()
+
+    assert settings.app_name == "Custom Chat"
+
+
 def test_settings_reads_model_environment(monkeypatch):
     monkeypatch.setenv("MODEL_ID", "test-model")
     monkeypatch.setenv("MODEL_BASE_URL", "https://example.test/v1")
     monkeypatch.setenv("MODEL_API_KEY", "test-key")
     monkeypatch.setenv("MODEL_TEMPERATURE", "0.2")
+    monkeypatch.setenv("CORS_ORIGINS", "http://127.0.0.1:5173")
 
     settings = Settings()
 
@@ -58,3 +67,15 @@ def test_settings_reads_tool_loading_environment(monkeypatch):
 
     assert settings.tools_enabled is False
     assert settings.tools_dir == "custom-tools"
+
+
+def test_settings_reads_human_loop_environment(monkeypatch):
+    settings = Settings()
+
+    assert settings.human_loop_enabled is False
+
+    monkeypatch.setenv("HUMAN_LOOP_ENABLED", "true")
+
+    enabled_settings = Settings()
+
+    assert enabled_settings.human_loop_enabled is True

@@ -1,5 +1,5 @@
 from app.chat import agent as agent_module
-from app.chat.agent import DeepAgentRunner
+from app.chat.agent import DeepAgentRunner, _map_deepagents_event
 from app.config import Settings
 
 
@@ -9,7 +9,7 @@ class FakeChatOpenAI:
 
 
 class FakeEventAgent:
-    async def astream_events(self, payload, version):
+    async def astream_events(self, payload, config=None, version="v2"):
         yield {
             "event": "on_tool_start",
             "name": "write_todos",
@@ -110,6 +110,37 @@ def test_deep_agent_runner_passes_tools_and_human_loop_config(monkeypatch, tmp_p
 
     assert captured["tools"] == [fake_tool]
     assert captured["interrupt_on"]["write_file"]["allowed_decisions"] == ["approve", "reject"]
+
+
+def test_deepagents_interrupt_maps_to_approval_event():
+    event = _map_deepagents_event(
+        {
+            "data": {
+                "__interrupt__": [
+                    {
+                        "action_requests": [
+                            {
+                                "name": "write_file",
+                                "args": {"path": "/tmp/a.txt"},
+                                "description": "Review write",
+                            }
+                        ],
+                        "review_configs": [
+                            {
+                                "action_name": "write_file",
+                                "allowed_decisions": ["approve", "reject"],
+                            }
+                        ],
+                    }
+                ]
+            }
+        }
+    )
+
+    assert event["type"] == "approval_required"
+    assert event["toolName"] == "write_file"
+    assert event["payload"] == {"path": "/tmp/a.txt"}
+    assert event["allowedDecisions"] == ["approve", "reject"]
 
 
 async def test_deep_agent_runner_converts_todo_events_to_reasoning(monkeypatch, tmp_path, caplog):
