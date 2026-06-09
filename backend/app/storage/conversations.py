@@ -11,6 +11,13 @@ class UnknownMessageError(Exception):
     pass
 
 
+class ConversationBusyError(Exception):
+    pass
+
+
+ACTIVE_ASSISTANT_STATUSES = {MessageStatus.STREAMING, MessageStatus.PENDING_APPROVAL}
+
+
 class InMemoryConversationRepository:
     def __init__(self) -> None:
         self._conversations: dict[str, Conversation] = {}
@@ -42,6 +49,34 @@ class InMemoryConversationRepository:
         with self._lock:
             self._get_conversation_unlocked(conversation_id)
             return list(self._messages[conversation_id])
+
+    def has_active_assistant(self, conversation_id: str) -> bool:
+        with self._lock:
+            self._get_conversation_unlocked(conversation_id)
+            return self._has_active_assistant_unlocked(conversation_id)
+
+    def begin_assistant_turn(self, conversation_id: str, user_content: str) -> tuple[Message, list[dict[str, str]]]:
+        with self._lock:
+            conversation = self._get_conversation_unlocked(conversation_id)
+            if self._has_active_assistant_unlocked(conversation_id):
+                raise ConversationBusyError(conversation_id)
+
+            user_message = Message(conversation_id=conversation_id, role=MessageRole.USER, content=user_content)
+            assistant_message = Message(
+                conversation_id=conversation_id,
+                role=MessageRole.ASSISTANT,
+                content="",
+                status=MessageStatus.STREAMING,
+            )
+            self._messages[conversation_id].extend([user_message, assistant_message])
+            conversation.updated_at = now_utc()
+            history = [
+                {"role": message.role.value, "content": message.content}
+                for message in self._messages[conversation_id]
+                if message.id != assistant_message.id
+                and not (message.role == MessageRole.ASSISTANT and message.status in ACTIVE_ASSISTANT_STATUSES)
+            ]
+            return assistant_message, history
 
     def get_message(self, conversation_id: str, message_id: str) -> Message:
         with self._lock:
@@ -82,5 +117,12 @@ class InMemoryConversationRepository:
                     if status is not None:
                         message.status = status
                     message.updated_at = now_utc()
+                    self._conversations[conversation_id].updated_at = now_utc()
                     return message
             raise UnknownMessageError(message_id)
+
+    def _has_active_assistant_unlocked(self, conversation_id: str) -> bool:
+        return any(
+            message.role == MessageRole.ASSISTANT and message.status in ACTIVE_ASSISTANT_STATUSES
+            for message in self._messages[conversation_id]
+        )

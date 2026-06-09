@@ -1,6 +1,10 @@
 from fastapi.testclient import TestClient
 
+from fastapi import FastAPI
+
+from app.api.conversations import create_router as create_conversations_router
 from app.main import app
+from app.storage.conversations import ConversationBusyError, InMemoryConversationRepository
 
 
 def test_health_endpoint():
@@ -76,3 +80,20 @@ def test_stream_without_api_key_returns_failed_event():
     assert "data: " in response.text
     assert '"type": "started"' in response.text
     assert '"type": "failed"' in response.text
+
+
+def test_stream_busy_conversation_returns_conflict():
+    repository = InMemoryConversationRepository()
+    conversation = repository.create_conversation()
+
+    class BusyChatService:
+        def stream_user_message(self, conversation_id, content):
+            raise ConversationBusyError(conversation_id)
+
+    test_app = FastAPI()
+    test_app.include_router(create_conversations_router(repository, BusyChatService()))
+    client = TestClient(test_app)
+
+    response = client.post(f"/conversations/{conversation.id}/messages/stream", json={"content": "hello"})
+
+    assert response.status_code == 409

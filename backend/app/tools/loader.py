@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from app.metadata.frontmatter import read_frontmatter
 from app.tools.schemas import ToolMetadata
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,7 @@ def load_tools(root_dir: Path | str, tools_dir: str) -> list[Any]:
 def load_tool_catalog(root_dir: Path | str, tools_dir: str) -> ToolCatalog:
     root = Path(root_dir).resolve()
     metadata = _discover_tool_metadata(root, tools_dir)
+    metadata_by_id = {tool.id: tool for tool in metadata}
     loaded_tools: list[Any] = []
     for tool_metadata in metadata:
         tool_dir = root / Path(tool_metadata.path).parent
@@ -35,11 +37,15 @@ def load_tool_catalog(root_dir: Path | str, tools_dir: str) -> ToolCatalog:
         try:
             loaded_tool = _load_tool_from_file(tool_file, tool_metadata.id)
         except Exception as exc:
+            load_error = _bounded_error(exc)
+            metadata_by_id[tool_metadata.id] = tool_metadata.model_copy(
+                update={"available": False, "loadError": load_error}
+            )
             logger.warning("tools.skip id=%s path=%s error=%s", tool_metadata.id, tool_file, exc)
             continue
         loaded_tools.append(loaded_tool)
     logger.info("tools.loaded count=%d", len(loaded_tools))
-    return ToolCatalog(metadata=metadata, tools=loaded_tools)
+    return ToolCatalog(metadata=[metadata_by_id[tool.id] for tool in metadata], tools=loaded_tools)
 
 
 def empty_tool_catalog() -> ToolCatalog:
@@ -96,15 +102,9 @@ def _load_tool_from_file(tool_file: Path, tool_id: str) -> Any:
 
 
 def _read_metadata(metadata_file: Path) -> dict[str, str]:
-    lines = metadata_file.read_text(encoding="utf-8").splitlines()
-    if not lines or lines[0].strip() != "---":
-        return {}
+    return read_frontmatter(metadata_file)
 
-    metadata: dict[str, str] = {}
-    for line in lines[1:]:
-        if line.strip() == "---":
-            break
-        key, separator, value = line.partition(":")
-        if separator:
-            metadata[key.strip()] = value.strip().strip("\"'")
-    return metadata
+
+def _bounded_error(exc: Exception, limit: int = 300) -> str:
+    text = str(exc)
+    return text if len(text) <= limit else f"{text[:limit]}..."

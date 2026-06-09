@@ -6,3 +6,5 @@ class ToolMetadata(BaseModel):
     name: str
     description: str
     path: str
+    available: bool = True
+    loadError: str = ""

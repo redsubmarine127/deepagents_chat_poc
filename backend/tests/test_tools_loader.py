@@ -43,6 +43,25 @@ def test_load_tools_skips_bad_tool(tmp_path, caplog):
     assert "tools.skip" in "\n".join(record.getMessage() for record in caplog.records)
 
 
+def test_load_tool_catalog_marks_bad_tool_unavailable(tmp_path):
+    good = tmp_path / "tools" / "good"
+    bad = tmp_path / "tools" / "bad"
+    good.mkdir(parents=True)
+    bad.mkdir(parents=True)
+    (good / "TOOL.md").write_text("---\nname: good\n---\n", encoding="utf-8")
+    (good / "tool.py").write_text("def get_tool():\n    return lambda: 'ok'\n", encoding="utf-8")
+    (bad / "TOOL.md").write_text("---\nname: bad\n---\n", encoding="utf-8")
+    (bad / "tool.py").write_text("raise RuntimeError('broken')\n", encoding="utf-8")
+
+    catalog = load_tool_catalog(tmp_path, "tools")
+    metadata_by_id = {tool.id: tool for tool in catalog.metadata}
+
+    assert metadata_by_id["good"].available is True
+    assert metadata_by_id["good"].loadError == ""
+    assert metadata_by_id["bad"].available is False
+    assert "broken" in metadata_by_id["bad"].loadError
+
+
 def test_load_tool_catalog_returns_metadata_and_loaded_tools(tmp_path):
     tool_dir = tmp_path / "tools" / "echo"
     tool_dir.mkdir(parents=True)

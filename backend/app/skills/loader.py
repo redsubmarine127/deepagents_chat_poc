@@ -2,6 +2,7 @@ from dataclasses import dataclass
 import logging
 from pathlib import Path
 
+from app.metadata.frontmatter import read_frontmatter
 from app.skills.schemas import SkillMetadata
 
 logger = logging.getLogger(__name__)
@@ -92,16 +93,4 @@ def discover_skills(root_dir: Path | str, skills_dir: str) -> list[SkillMetadata
 
 
 def _read_metadata(skill_file: Path) -> dict[str, str]:
-    text = skill_file.read_text(encoding="utf-8")
-    lines = text.splitlines()
-    if not lines or lines[0].strip() != "---":
-        return {}
-
-    metadata: dict[str, str] = {}
-    for line in lines[1:]:
-        if line.strip() == "---":
-            break
-        key, separator, value = line.partition(":")
-        if separator:
-            metadata[key.strip()] = value.strip().strip("\"'")
-    return metadata
+    return read_frontmatter(skill_file)

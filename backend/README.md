@@ -48,6 +48,7 @@ python -m pytest -v
 - An in-memory conversation repository.
 - An in-memory approval store.
 - A single tool catalog scan for metadata and executable tools.
+- Tool metadata records include `available` and `loadError` so bad tools are visible but not treated as executable.
 - A DeepAgents runner. `interrupt_on` for `write_file` and `edit_file` is only configured when `HUMAN_LOOP_ENABLED=true`.
 - An in-memory LangGraph checkpointer for approval resume during the current process lifetime.
 

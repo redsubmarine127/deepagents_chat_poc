@@ -1,11 +1,11 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
-from app.api.errors import conversation_not_found, failed_sse
+from app.api.errors import conversation_not_found
 from app.chat.schemas import SendMessageRequest, to_conversation_response, to_message_response
 from app.chat.service import ChatService
 from app.chat.sse import format_sse
-from app.storage.conversations import InMemoryConversationRepository, UnknownConversationError
+from app.storage.conversations import ConversationBusyError, InMemoryConversationRepository, UnknownConversationError
 
 
 def create_router(repository: InMemoryConversationRepository, chat_service: ChatService) -> APIRouter:
@@ -28,14 +28,18 @@ def create_router(repository: InMemoryConversationRepository, chat_service: Chat
 
     @router.post("/conversations/{conversation_id}/messages/stream")
     async def stream_message(conversation_id: str, request: SendMessageRequest):
+        try:
+            event_stream = chat_service.stream_user_message(conversation_id, request.content)
+        except UnknownConversationError as exc:
+            raise conversation_not_found() from exc
+        except ConversationBusyError as exc:
+            raise HTTPException(status_code=409, detail="Conversation already has an active assistant turn.") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
         async def message_event_stream():
-            try:
-                async for chat_event in chat_service.stream_user_message(conversation_id, request.content):
-                    yield format_sse(chat_event)
-            except UnknownConversationError:
-                yield failed_sse("Conversation not found.")
-            except ValueError as exc:
-                yield failed_sse(str(exc))
+            async for chat_event in event_stream:
+                yield format_sse(chat_event)
 
         return StreamingResponse(message_event_stream(), media_type="text/event-stream")
 

@@ -5,7 +5,7 @@ from app.chat.retry import AgentRetryExhaustedError
 from app.chat.service import ChatService
 from app.human_loop.schemas import ApprovalDecisionType
 from app.human_loop.store import InMemoryApprovalStore
-from app.storage.conversations import InMemoryConversationRepository
+from app.storage.conversations import ConversationBusyError, InMemoryConversationRepository
 
 
 class FakeAgentRunner:
@@ -42,6 +42,20 @@ async def test_chat_service_streams_and_persists_assistant_message():
     assert messages[0].content == "hi"
     assert messages[1].content == "hello world"
     assert messages[1].status == MessageStatus.COMPLETED
+
+
+def test_chat_service_rejects_new_message_when_conversation_is_active():
+    repository = InMemoryConversationRepository()
+    conversation = repository.create_conversation()
+    repository.begin_assistant_turn(conversation.id, "already running")
+    service = make_service(repository, FakeAgentRunner())
+
+    try:
+        service.stream_user_message(conversation.id, "hi")
+    except ConversationBusyError:
+        pass
+    else:
+        raise AssertionError("Expected active conversation to reject a new message")
 
 
 class FakeReasoningAgentRunner:

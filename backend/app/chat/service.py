@@ -12,7 +12,7 @@ from app.chat.events import (
     stream_started,
 )
 from app.chat.retry import AgentRetryExhaustedError
-from app.chat.schemas import MessageRole, MessageStatus
+from app.chat.schemas import MessageStatus
 from app.human_loop.schemas import ApprovalDecisionType
 from app.human_loop.store import InMemoryApprovalStore, UnknownApprovalError
 from app.observability import summarize_text
@@ -50,7 +50,7 @@ class ChatService:
         self._agent_runner = agent_runner
         self._approval_store = approval_store
 
-    async def stream_user_message(self, conversation_id: str, content: str) -> AsyncIterator[ChatStreamEvent]:
+    def stream_user_message(self, conversation_id: str, content: str) -> AsyncIterator[ChatStreamEvent]:
         text = content.strip()
         if not text:
             raise ValueError("Message content is required.")
@@ -61,34 +61,29 @@ class ChatService:
             len(text),
             summarize_text(text),
         )
-        self._repository.append_message(conversation_id, role=MessageRole.USER, content=text)
-        assistant = self._repository.append_message(
-            conversation_id,
-            role=MessageRole.ASSISTANT,
-            content="",
-            status=MessageStatus.STREAMING,
-        )
-        yield stream_started(assistant.id)
-        yield stream_reasoning("已创建任务上下文，开始调用 Agent", message_id=assistant.id)
-
-        history = [
-            {"role": message.role.value, "content": message.content}
-            for message in self._repository.get_messages(conversation_id)
-            if message.id != assistant.id
-        ]
+        assistant, history = self._repository.begin_assistant_turn(conversation_id, text)
         logger.info(
             "chat.stream.context conversation_id=%s assistant_message_id=%s history_count=%d",
             conversation_id,
             assistant.id,
             len(history),
         )
+        return self._stream_prepared_user_message(conversation_id, assistant.id, history)
 
+    async def _stream_prepared_user_message(
+        self,
+        conversation_id: str,
+        assistant_message_id: str,
+        history: list[dict[str, str]],
+    ) -> AsyncIterator[ChatStreamEvent]:
+        yield stream_started(assistant_message_id)
+        yield stream_reasoning("已创建任务上下文，开始调用 Agent", message_id=assistant_message_id)
         try:
             agent_events = self._agent_runner.stream(history, thread_id=conversation_id)
-            async for chat_event in self._relay_agent_events(conversation_id, assistant.id, agent_events):
+            async for chat_event in self._relay_agent_events(conversation_id, assistant_message_id, agent_events):
                 yield chat_event
         except Exception as exc:
-            async for failure_event in self._handle_stream_failure(conversation_id, assistant.id, exc):
+            async for failure_event in self._handle_stream_failure(conversation_id, assistant_message_id, exc):
                 yield failure_event
 
     async def stream_approval_decision(

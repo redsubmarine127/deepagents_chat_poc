@@ -116,7 +116,7 @@ tools/
 
 - `GET /api/tools` 返回已发现的 tool metadata。
 - 有效 tool 会传入 DeepAgents。
-- 坏 tool 会被跳过并写入 warning 日志，不阻塞其他 tool。
+- Tool metadata 包含 `available` 和 `loadError`，坏 tool 会标记为不可用、写入 warning 日志，并不会阻塞其他 tool。
 
 Human-in-the-loop 当前是进程内存版，默认关闭：
 
